@@ -23,16 +23,12 @@ cli.registerTool("publish", publisher_1.Publisher);
 cli.registerTool("update", updater_1.Updater, { requiresConfig: false });
 // Run
 cli.start();
-var child_process = require("child_process");
-child_process.exec("npm version", function (err, stdout) {
-    var found = stdout.match(/'eman-script': '[0-9]+\.[0-9]+.[0-9]+'/);
-    if (found) {
-        var curVer = found[0].split(': ').pop().slice(1, -1).split('.').map(function (part) { return parseInt(part); });
-        console.log("Current version:", curVer);
-        child_process.exec("npm show eman-script version", function (err, stdout) {
-            var remoteVer = stdout.split('.').map(function (part) { return parseInt(part); });
-            console.log("Remote version:", remoteVer);
-        });
-    }
-});
+/*import { VersionChecker } from './tools/versionchecker';
+
+const versionChecker = new VersionChecker();
+versionChecker.performVersionCheck();
+
+cli.start(() => {
+    console.log(versionChecker.getUpdate());
+});*/ 
 //# sourceMappingURL=main.js.map
