@@ -1,0 +1,19 @@
+{
+	"exclude": [
+		"node_modules",
+		"build",
+		"src/za-plugn"
+	],
+	"include": [
+		"src"
+	],
+	"compilerOptions": {
+		"moduleResolution": "node",
+		"target": "es5",
+		"noImplicitAny": false,
+		"outDir": "build",
+		"rootDir": "src",
+		"sourceMap": true,
+		"declaration": true
+	}
+}

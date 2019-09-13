@@ -1,0 +1,36 @@
+import { RootNode, ExprNode, HTMLExpr, StmtNode, ReturnStmt, BlockStmt, VarDeclStmt, WhileStmt, ForStmt, ForOfStmt, DoWhileStmt, DescribeNode, RunNode, HTMLDoc, TemplateNode, RunTestNode, RunTodoNode } from './parsenodes';
+export declare class Parser {
+    private _lexer;
+    constructor();
+    parseHTMLDoc: (fileName: string, input: string, visitor?: (node: HTMLExpr) => HTMLExpr) => HTMLDoc;
+    parseFile: (fileName: string) => RootNode;
+    private parseInput;
+    private parseExport;
+    private parseImport;
+    private parseYields;
+    private parseYield;
+    parseStatement: () => StmtNode;
+    parseDescribe: () => DescribeNode;
+    parseTestOrTodo: () => RunNode;
+    parseTodoRun: () => RunTodoNode;
+    parseTestRun: () => RunTestNode;
+    parseWhile: () => WhileStmt;
+    parseFor: () => ForStmt;
+    parseForOf: () => ForOfStmt;
+    parseDoWhile: () => DoWhileStmt;
+    verifyLValue: (expr: ExprNode) => void;
+    parseVarDecl: () => VarDeclStmt;
+    parseClassDecl: () => VarDeclStmt;
+    parseClass: (onGetName?: (name: string) => void) => ExprNode;
+    parseConstructor: (className: string) => VarDeclStmt;
+    parseFuncDecl: () => VarDeclStmt;
+    parseReturn: () => ReturnStmt;
+    parseBlock: (isFuncBlock?: boolean) => BlockStmt;
+    parseTemplate: () => TemplateNode;
+    parseHTML: (doc?: HTMLDoc, visitor?: (node: HTMLExpr) => HTMLExpr) => HTMLExpr;
+    private parseExpression;
+    private tryParseArrowFunction;
+    private parseIf;
+    private parseExpressionNormally;
+    private parseValue;
+}
