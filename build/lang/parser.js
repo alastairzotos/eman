@@ -15,12 +15,10 @@ var fs = require("fs");
 var errors_1 = require("./errors");
 var lexer_1 = require("./lexer");
 var parsenodes_1 = require("./parsenodes");
-var pretty = require('pretty');
 var Parser = /** @class */ (function () {
     function Parser() {
         var _this = this;
         this.parseHTMLDoc = function (fileName, input, visitor) {
-            input = pretty(input);
             _this._lexer = new lexer_1.Lexer(fileName, input);
             var doc = new parsenodes_1.HTMLDoc();
             doc.startPosition = _this._lexer.getStartPosition();

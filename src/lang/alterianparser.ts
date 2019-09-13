@@ -29,7 +29,7 @@ export class AlterianParser {
                 expressions.push(new LitExpr(this._lexer.acceptHTMLText().value as string));
 
                 // Not entirely sure about the + 1 here
-                this._lexer.setHTMLContentStart(this._lexer.getPosition().position + 1);
+                this._lexer.setHTMLContentStart(this._lexer.getPosition().position + 0);
             }
 
             // We can't parse other HTML elements

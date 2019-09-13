@@ -22,7 +22,7 @@ var AlterianParser = /** @class */ (function () {
                 if (_this._lexer.isWhite(_this._lexer.getHTMLContentStart())) {
                     expressions.push(new parsenodes_1.LitExpr(_this._lexer.acceptHTMLText().value));
                     // Not entirely sure about the + 1 here
-                    _this._lexer.setHTMLContentStart(_this._lexer.getPosition().position + 1);
+                    _this._lexer.setHTMLContentStart(_this._lexer.getPosition().position + 0);
                 }
                 // We can't parse other HTML elements
                 else if (_this._lexer.check(lexer_1.TokenType.TagLT)) {
