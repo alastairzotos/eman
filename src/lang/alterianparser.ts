@@ -27,7 +27,9 @@ export class AlterianParser {
             // Get whitespace
             if (this._lexer.isWhite(this._lexer.getHTMLContentStart())) {
                 expressions.push(new LitExpr(this._lexer.acceptHTMLText().value as string));
-                this._lexer.setHTMLContentStart(this._lexer.getEndPosition().position + 1);
+
+                // Not entirely sure about the + 1 here
+                this._lexer.setHTMLContentStart(this._lexer.getPosition().position + 1);
             }
 
             // We can't parse other HTML elements

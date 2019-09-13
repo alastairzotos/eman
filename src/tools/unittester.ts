@@ -208,7 +208,7 @@ export class UnitTester extends CoreTool<IUnitTesterOutput> {
     private runTest = (runtime: Runtime, output: IRuntimeOutput, run: RunTestNode): boolean => {
 
         try {
-
+            
             const evaluatedSettings = UnitTester.evaluateSettings(runtime, output, run);
             const settings = evaluatedSettings;
             const htmlOutput = renderOutput(output.output, output, runtime, settings);
