@@ -1105,7 +1105,7 @@ var AlterianMethodCall = /** @class */ (function (_super) {
                 return _this_1._functions[_this_1.prop](obj, runtime, args);
             }
             else {
-                throw new errors_1.CompilerError("So such Alterian method '" + _this_1.prop + "'", _this_1.startPosition, _this_1.endPosition);
+                throw new errors_1.CompilerError("No such Alterian method '" + _this_1.prop + "'", _this_1.startPosition, _this_1.endPosition);
             }
         };
         _this_1._functions = {

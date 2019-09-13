@@ -1153,7 +1153,7 @@ export class AlterianMethodCall extends ExprNode {
             if (obj.__isYielded) return "";
             return this._functions[this.prop](obj, runtime, args);
         } else {
-            throw new CompilerError(`So such Alterian method '${this.prop}'`, this.startPosition, this.endPosition);
+            throw new CompilerError(`No such Alterian method '${this.prop}'`, this.startPosition, this.endPosition);
         }
     };
 
