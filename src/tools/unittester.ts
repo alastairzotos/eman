@@ -117,10 +117,8 @@ export class UnitTester extends CoreTool<IUnitTesterOutput> {
     };
 
     static generateTestInfo = (runtime: Runtime, runNode: RunTestNode, describeNode?: DescribeNode): string => {
-        const fakeHeading1 = `Test: ${runNode.description}`;
-        const fakeHeading2 = describeNode ? describeNode.description : '';
-        const separator = '-'.repeat(Math.max(fakeHeading1.length, fakeHeading2.length));
-        return `<pre>${separator}<br/>${describeNode ? `<strong style='color: #136b0d'>${describeNode.description}</strong><br/>` : ''}<strong style='color: #107f85; text-decoration: underline;'>${runNode.description}</strong><br />${ Object.keys(runNode.settings).map( varName => `<strong>${varName}</strong> = ${runNode.settings[varName].evaluate(runtime, {})}` ).join('<br/>') }<br/>${separator}</pre>`;
+        const separator = '<hr/>';
+        return `<pre>${separator}${describeNode ? `<strong style='color: #136b0d'>${describeNode.description}</strong><br/>` : ''}<span style='color: #3477eb;'><strong>Test:</strong> ${runNode.description}</span><br />${ Object.keys(runNode.settings).map( varName => `<strong>${varName}</strong> = ${runNode.settings[varName].evaluate(runtime, {})}` ).join('<br/>') }<br/>${separator}</pre>`;
     };
 
     static evaluateSettings = (runtime: Runtime, output: IRuntimeOutput, run: RunTestNode): { [varName: string]: any } => {
@@ -208,7 +206,7 @@ export class UnitTester extends CoreTool<IUnitTesterOutput> {
     private runTest = (runtime: Runtime, output: IRuntimeOutput, run: RunTestNode): boolean => {
 
         try {
-            
+
             const evaluatedSettings = UnitTester.evaluateSettings(runtime, output, run);
             const settings = evaluatedSettings;
             const htmlOutput = renderOutput(output.output, output, runtime, settings);

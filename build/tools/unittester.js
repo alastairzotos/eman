@@ -256,10 +256,8 @@ var UnitTester = /** @class */ (function (_super) {
         return _this;
     }
     UnitTester.generateTestInfo = function (runtime, runNode, describeNode) {
-        var fakeHeading1 = "Test: " + runNode.description;
-        var fakeHeading2 = describeNode ? describeNode.description : '';
-        var separator = '-'.repeat(Math.max(fakeHeading1.length, fakeHeading2.length));
-        return "<pre>" + separator + "<br/>" + (describeNode ? "<strong style='color: #136b0d'>" + describeNode.description + "</strong><br/>" : '') + "<strong style='color: #107f85; text-decoration: underline;'>" + runNode.description + "</strong><br />" + Object.keys(runNode.settings).map(function (varName) { return "<strong>" + varName + "</strong> = " + runNode.settings[varName].evaluate(runtime, {}); }).join('<br/>') + "<br/>" + separator + "</pre>";
+        var separator = '<hr/>';
+        return "<pre>" + separator + (describeNode ? "<strong style='color: #136b0d'>" + describeNode.description + "</strong><br/>" : '') + "<span style='color: #3477eb;'><strong>Test:</strong> " + runNode.description + "</span><br />" + Object.keys(runNode.settings).map(function (varName) { return "<strong>" + varName + "</strong> = " + runNode.settings[varName].evaluate(runtime, {}); }).join('<br/>') + "<br/>" + separator + "</pre>";
     };
     UnitTester.evaluateSettings = function (runtime, output, run) {
         // Collect settings
