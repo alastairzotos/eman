@@ -5,6 +5,7 @@ import { Lexer, TokenType, getOpPrecedence, getAsOp, isOp } from './lexer';
 import { RootNode, YieldNode, ExprNode, ExprType, AccessArrExpr, AccessObjExpr, CallExpr, ArrayExpr, ObjExpr, ParExpr, LoadExpr, LitExpr, OpExpr, UnaryExpr, FuncExpr, IfExpr, HTMLTextExpr, HTMLExpr, HTMLExprType, HTMLElemExpr, HTMLDynExpr, StmtNode, ReturnStmt, BlockStmt, VarDeclStmt, ImportNode, NoopStmt, WhileStmt, ForStmt, ForOfStmt, DoWhileStmt, MethodCallExpr, NewExpr, LookupTableNode, NodeType, DescribeNode, RunNode, HTMLDoc, TemplateNode, RunTestNode, RunTodoNode, StmtType, StmtList, HTMLDocType, HTMLComment } from './parsenodes';
 import { AlterianParser } from './alterianparser';
 
+const pretty = require('pretty');
 
 export class Parser {
     private _lexer: Lexer;
@@ -13,6 +14,7 @@ export class Parser {
     }
 
     parseHTMLDoc = (fileName: string, input: string, visitor?: (node: HTMLExpr)=>HTMLExpr) => {
+        input = pretty(input);
         this._lexer = new Lexer(fileName, input);
 
         const doc = new HTMLDoc();
@@ -810,7 +812,13 @@ export class Parser {
 
                 const docTypeElem = new HTMLDocType();
                 while (!this._lexer.check(TokenType.TagGT)) {
-                    docTypeElem.values.push(this._lexer.accept().value + '');
+                    const docTypeValueToken = this._lexer.accept();
+
+                    if (docTypeValueToken.type == TokenType.String) {
+                        docTypeElem.values.push('"' + docTypeValueToken.value + '"');
+                    } else {
+                        docTypeElem.values.push(docTypeValueToken.value + '');
+                    }
                 }
 
                 this._lexer.accept(TokenType.TagGT);

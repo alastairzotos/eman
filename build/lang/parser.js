@@ -15,10 +15,12 @@ var fs = require("fs");
 var errors_1 = require("./errors");
 var lexer_1 = require("./lexer");
 var parsenodes_1 = require("./parsenodes");
+var pretty = require('pretty');
 var Parser = /** @class */ (function () {
     function Parser() {
         var _this = this;
         this.parseHTMLDoc = function (fileName, input, visitor) {
+            input = pretty(input);
             _this._lexer = new lexer_1.Lexer(fileName, input);
             var doc = new parsenodes_1.HTMLDoc();
             doc.startPosition = _this._lexer.getStartPosition();
@@ -623,7 +625,13 @@ var Parser = /** @class */ (function () {
                     _this._lexer.accept();
                     var docTypeElem = new parsenodes_1.HTMLDocType();
                     while (!_this._lexer.check(lexer_1.TokenType.TagGT)) {
-                        docTypeElem.values.push(_this._lexer.accept().value + '');
+                        var docTypeValueToken = _this._lexer.accept();
+                        if (docTypeValueToken.type == lexer_1.TokenType.String) {
+                            docTypeElem.values.push('"' + docTypeValueToken.value + '"');
+                        }
+                        else {
+                            docTypeElem.values.push(docTypeValueToken.value + '');
+                        }
                     }
                     _this._lexer.accept(lexer_1.TokenType.TagGT);
                     return visitor(docTypeElem);
