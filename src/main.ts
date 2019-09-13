@@ -28,3 +28,19 @@ cli.registerTool("update",  Updater, { requiresConfig: false });
 
 // Run
 cli.start();
+
+import * as child_process from 'child_process';
+
+child_process.exec("npm version", (err, stdout) => {
+    const found = stdout.match(/'eman-script': '[0-9]+\.[0-9]+.[0-9]+'/);
+    if (found) {
+        const curVer = found[0].split(': ').pop().slice(1, -1).split('.').map(part => parseInt(part));
+
+        console.log("Current version:", curVer);
+
+        child_process.exec("npm show eman-script version", (err, stdout) => {
+            const remoteVer = stdout.split('.').map(part => parseInt(part));
+            console.log("Remote version:", remoteVer);
+        });
+    }
+})
