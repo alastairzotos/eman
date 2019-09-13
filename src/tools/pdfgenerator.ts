@@ -14,7 +14,7 @@ import * as rimraf from 'rimraf';
 import * as argvParser from 'argv-parser';
 
 import { UnitTester } from './unittester';
-import { Runtime, IRuntimeOutput, CURRENT_TEST_RUN_NAME } from '../lang/runtime';
+import { Runtime, IRuntimeOutput, TEST_SETTINGS_NAME } from '../lang/runtime';
 import { DescribeNode, RunNodeType, RunTestNode, ExprNode } from '../lang/parsenodes';
 import { logOutput, stopLog } from '../em-api/uploadlogger';
 import { FuncClosure } from '../lang/closure';
@@ -132,6 +132,12 @@ export class PDFGenerator extends CoreTool<any> {
         this.runCode({
             onRuntimeCreated: runtime => {
                 runtime.getScope()["runtime"].renderingPdf = true;
+
+                /*
+                Before runtime runs the code, <TestSettings /> must evaluate to itself
+                so that later on, while each test is run, it can be reset to return current test data
+                */
+                runtime.registerFunction(TEST_SETTINGS_NAME, () => `<${TEST_SETTINGS_NAME} />`);
             },
 
             onRunFinished: (runtime, output) => {
@@ -241,8 +247,7 @@ export class PDFGenerator extends CoreTool<any> {
 
                                 // Mapped row
                                 const mappedRow = {
-                                    now: generateNowSetting(),
-                                    [CURRENT_TEST_RUN_NAME]: ""
+                                    now: generateNowSetting()
                                 };
                                 mappedHeadings.forEach((heading, index) => {
                                     mappedRow[heading] = line[index];
@@ -337,7 +342,8 @@ export class PDFGenerator extends CoreTool<any> {
         const next = ([current, ...rest]: ITestInfo[], cb: (err: any)=>void) => {
             if (current) {
                 const testSettings = UnitTester.evaluateSettings(runtime, output, current.run);
-                testSettings[CURRENT_TEST_RUN_NAME] = UnitTester.generateTestInfo(runtime, current.run, current.parent);
+
+                runtime.switchOnTestSettings(UnitTester.generateTestInfo(runtime, current.run, current.parent));
 
                 const html = renderOutput(output.output, output, runtime, testSettings);
                 htmlOutputs.push(html);

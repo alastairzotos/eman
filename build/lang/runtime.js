@@ -20,7 +20,7 @@ var parser_1 = require("./parser");
 var varconfig_1 = require("./varconfig");
 var closure_1 = require("./closure");
 var remotevars_1 = require("./remotevars");
-exports.CURRENT_TEST_RUN_NAME = '__CURRENT_TEST_RUN__';
+exports.TEST_SETTINGS_NAME = "TestSettings";
 var IMPORT_CACHE = {};
 var Runtime = /** @class */ (function () {
     function Runtime() {
@@ -162,6 +162,9 @@ var Runtime = /** @class */ (function () {
             var secName = "_s" + ++Runtime._sectionCount;
             Runtime.sections[secName] = varConfig;
             return new remotevars_1.YieldVar(secName);
+        };
+        this.switchOnTestSettings = function (output) {
+            _this_1.registerFunction(exports.TEST_SETTINGS_NAME, function () { return output; });
         };
         this.generateIntermediateValue = function (conditions) {
             var intName = "_e" + ++Runtime._intermediateCount;
@@ -380,17 +383,13 @@ var Runtime = /** @class */ (function () {
             runningTests: false
         };
         this.setConst("runtime");
-        // Component to display current test settings
-        var _this = this;
-        this.registerFunction("TestSettings", function () {
-            var settings = _this.getScope()["runtime"];
-            if (settings && (settings.renderingPdf || settings.runningTests)) {
-                return "{" + exports.CURRENT_TEST_RUN_NAME + "}";
-            }
-            else {
-                return "";
-            }
-        });
+        /*
+        Component to display current test settings
+
+        Should return nothing in the general case.
+        This function can be overridden when we want an output
+        */
+        this.registerFunction(exports.TEST_SETTINGS_NAME, function () { return ""; });
     }
     Runtime.sections = {};
     Runtime.intermediates = {};

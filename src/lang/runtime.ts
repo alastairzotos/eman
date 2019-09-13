@@ -10,8 +10,7 @@ import { FuncClosure } from './closure';
 import { IValues } from './values';
 import { IntermediateRef, IYieldedVars, ILookupTable, ILookupTables, YieldVar } from './remotevars';
 
-
-export const CURRENT_TEST_RUN_NAME = '__CURRENT_TEST_RUN__';
+export const TEST_SETTINGS_NAME = "TestSettings";
 
 let IMPORT_CACHE = {};
 
@@ -72,17 +71,13 @@ export class Runtime {
         };
         this.setConst("runtime");
 
-        // Component to display current test settings
-        const _this = this;
-        this.registerFunction("TestSettings", () => {
-            const settings = _this.getScope()["runtime"];
+        /*
+        Component to display current test settings
 
-            if (settings && (settings.renderingPdf || settings.runningTests)) {
-                return `{${CURRENT_TEST_RUN_NAME}}`;
-            } else {
-                return "";
-            }
-        });
+        Should return nothing in the general case.
+        This function can be overridden when we want an output
+        */
+        this.registerFunction(TEST_SETTINGS_NAME, () => "");
 
     }
 
@@ -247,6 +242,10 @@ export class Runtime {
         Runtime.sections[secName] = varConfig;
 
         return new YieldVar(secName);
+    };
+
+    switchOnTestSettings = (output: string) => {
+        this.registerFunction(TEST_SETTINGS_NAME, () => output);
     };
 
     generateIntermediateValue = (conditions: IRuleCondition[]): IntermediateRef => {

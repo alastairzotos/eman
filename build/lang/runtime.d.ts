@@ -3,7 +3,7 @@ import { IVarConfig, IRuleCondition } from './varconfig';
 import { FuncClosure } from './closure';
 import { IValues } from './values';
 import { IntermediateRef, IYieldedVars, ILookupTables, YieldVar } from './remotevars';
-export declare const CURRENT_TEST_RUN_NAME = "__CURRENT_TEST_RUN__";
+export declare const TEST_SETTINGS_NAME = "TestSettings";
 export interface IScope {
     [name: string]: any;
 }
@@ -64,6 +64,7 @@ export declare class Runtime {
     isConst: (varName: string) => boolean;
     checkForYieldedLoad: (cb: () => any) => any;
     generateDynamicSection: (varConfig: IVarConfig) => YieldVar;
+    switchOnTestSettings: (output: string) => void;
     generateIntermediateValue: (conditions: IRuleCondition[]) => IntermediateRef;
     generateIntermediateConditions: (currentConditions: IRuleCondition[], conditions: IRuleCondition[]) => void;
     private handlePluginLoad;

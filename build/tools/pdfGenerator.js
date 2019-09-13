@@ -143,6 +143,11 @@ var PDFGenerator = /** @class */ (function (_super) {
             _this.runCode({
                 onRuntimeCreated: function (runtime) {
                     runtime.getScope()["runtime"].renderingPdf = true;
+                    /*
+                    Before runtime runs the code, <TestSettings /> must evaluate to itself
+                    so that later on, while each test is run, it can be reset to return current test data
+                    */
+                    runtime.registerFunction(runtime_1.TEST_SETTINGS_NAME, function () { return "<" + runtime_1.TEST_SETTINGS_NAME + " />"; });
                 },
                 onRunFinished: function (runtime, output) {
                     if (!output) {
@@ -224,18 +229,15 @@ var PDFGenerator = /** @class */ (function (_super) {
                                 .filter(function (val, index) { return index > 0; })
                                 .map(function (line) { return line.split(settings.delimeter); })
                                 .map(function (line) {
-                                var _a;
                                 // Raw data
                                 var rawRow = {};
                                 headings_1.forEach(function (heading, index) {
                                     rawRow[heading] = line[index];
                                 });
                                 // Mapped row
-                                var mappedRow = (_a = {
-                                        now: utils_1.generateNowSetting()
-                                    },
-                                    _a[runtime_1.CURRENT_TEST_RUN_NAME] = "",
-                                    _a);
+                                var mappedRow = {
+                                    now: utils_1.generateNowSetting()
+                                };
                                 mappedHeadings_1.forEach(function (heading, index) {
                                     mappedRow[heading] = line[index];
                                 });
@@ -313,7 +315,7 @@ var PDFGenerator = /** @class */ (function (_super) {
                 var current = _a[0], rest = _a.slice(1);
                 if (current) {
                     var testSettings = unittester_1.UnitTester.evaluateSettings(runtime, output, current.run);
-                    testSettings[runtime_1.CURRENT_TEST_RUN_NAME] = unittester_1.UnitTester.generateTestInfo(runtime, current.run, current.parent);
+                    runtime.switchOnTestSettings(unittester_1.UnitTester.generateTestInfo(runtime, current.run, current.parent));
                     var html = renderer_1.renderOutput(output.output, output, runtime, testSettings);
                     htmlOutputs.push(html);
                     _this.parseAndFollowLinks(runtime, html, current.run.settings, outputFile, settings, function (err, pageHtml) {
