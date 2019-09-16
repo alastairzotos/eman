@@ -12,8 +12,6 @@ import { IntermediateRef, IYieldedVars, ILookupTable, ILookupTables, YieldVar } 
 
 export const TEST_SETTINGS_NAME = "TestSettings";
 
-let IMPORT_CACHE = {};
-
 export interface IScope {
     [name: string]: any;
 }
@@ -40,6 +38,7 @@ export class Runtime {
 
     private static _sectionCount: number = 0;
     private static _intermediateCount: number = 0;
+    private static _importCache = {};
 
     public static clearStaticData = () => {
         Runtime.sections = {};
@@ -48,8 +47,7 @@ export class Runtime {
         Runtime.yieldLookups = {};
         Runtime._sectionCount = 0;
         Runtime._intermediateCount = 0;
-
-        IMPORT_CACHE = {};
+        Runtime._importCache = {};
     };
 
     public shouldThrowOnYieldedLoad: boolean = false;
@@ -343,11 +341,11 @@ export class Runtime {
             else if ((fullPath.endsWith('.aml') && fs.existsSync(fullPath)) || fs.existsSync(fullPath + '.aml')) {
 
                 let output: IRuntimeOutput = null;
-                if (IMPORT_CACHE[fullPath] === undefined) {
+                if (Runtime._importCache[fullPath] === undefined) {
                     output = (new Runtime()).run(fullPath.endsWith('.aml') ? fullPath : fullPath + '.aml');
-                    IMPORT_CACHE[fullPath] = output;
+                    Runtime._importCache[fullPath] = output;
                 } else {
-                    output = IMPORT_CACHE[fullPath];
+                    output = Runtime._importCache[fullPath];
                 }
 
                 // Update exported functions to use this runtime

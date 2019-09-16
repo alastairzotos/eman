@@ -39,6 +39,7 @@ export declare class Runtime {
     };
     private static _sectionCount;
     private static _intermediateCount;
+    private static _importCache;
     static clearStaticData: () => void;
     shouldThrowOnYieldedLoad: boolean;
     warningsSuppressed: boolean;

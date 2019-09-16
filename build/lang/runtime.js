@@ -21,7 +21,6 @@ var varconfig_1 = require("./varconfig");
 var closure_1 = require("./closure");
 var remotevars_1 = require("./remotevars");
 exports.TEST_SETTINGS_NAME = "TestSettings";
-var IMPORT_CACHE = {};
 var Runtime = /** @class */ (function () {
     function Runtime() {
         var _this_1 = this;
@@ -242,12 +241,12 @@ var Runtime = /** @class */ (function () {
                 // Import other aml members
                 else if ((fullPath.endsWith('.aml') && fs.existsSync(fullPath)) || fs.existsSync(fullPath + '.aml')) {
                     var output_1 = null;
-                    if (IMPORT_CACHE[fullPath] === undefined) {
+                    if (Runtime._importCache[fullPath] === undefined) {
                         output_1 = (new Runtime()).run(fullPath.endsWith('.aml') ? fullPath : fullPath + '.aml');
-                        IMPORT_CACHE[fullPath] = output_1;
+                        Runtime._importCache[fullPath] = output_1;
                     }
                     else {
-                        output_1 = IMPORT_CACHE[fullPath];
+                        output_1 = Runtime._importCache[fullPath];
                     }
                     // Update exported functions to use this runtime
                     Object.keys(output_1.exports).forEach(function (exportName) {
@@ -397,6 +396,7 @@ var Runtime = /** @class */ (function () {
     Runtime.yieldLookups = {};
     Runtime._sectionCount = 0;
     Runtime._intermediateCount = 0;
+    Runtime._importCache = {};
     Runtime.clearStaticData = function () {
         Runtime.sections = {};
         Runtime.intermediates = {};
@@ -404,7 +404,7 @@ var Runtime = /** @class */ (function () {
         Runtime.yieldLookups = {};
         Runtime._sectionCount = 0;
         Runtime._intermediateCount = 0;
-        IMPORT_CACHE = {};
+        Runtime._importCache = {};
     };
     return Runtime;
 }());
