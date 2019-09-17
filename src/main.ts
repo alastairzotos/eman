@@ -31,6 +31,8 @@ cli.registerTool("watch",   WatcherTool);
 // Run
 cli.start();
 
+// Test
+
 
 /*import { VersionChecker } from './tools/versionchecker';
 

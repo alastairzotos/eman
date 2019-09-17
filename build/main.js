@@ -25,6 +25,7 @@ cli.registerTool("update", updater_1.Updater, { requiresConfig: false });
 cli.registerTool("watch", watcher_1.WatcherTool);
 // Run
 cli.start();
+// Test
 /*import { VersionChecker } from './tools/versionchecker';
 
 const versionChecker = new VersionChecker();
