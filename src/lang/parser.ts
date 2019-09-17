@@ -515,6 +515,12 @@ export class Parser {
 
                 varName = this._lexer.accept(TokenType.Ident).value as string;
                 this._lexer.accept(TokenType.Colon);
+
+                // Check that we haven't set the same value twice
+                if (runNode.settings[varName] !== undefined) {
+                    throw new CompilerError(`Yielded value '${varName}' already set in test run`, this._lexer.getStartPosition())
+                }
+
                 runNode.settings[varName] = this.parseExpression();
             }
         }

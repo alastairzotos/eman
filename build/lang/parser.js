@@ -408,6 +408,10 @@ var Parser = /** @class */ (function () {
                     }
                     varName = _this._lexer.accept(lexer_1.TokenType.Ident).value;
                     _this._lexer.accept(lexer_1.TokenType.Colon);
+                    // Check that we haven't set the same value twice
+                    if (runNode.settings[varName] !== undefined) {
+                        throw new errors_1.CompilerError("Yielded value '" + varName + "' already set in test run", _this._lexer.getStartPosition());
+                    }
                     runNode.settings[varName] = _this.parseExpression();
                 }
             }

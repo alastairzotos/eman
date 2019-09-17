@@ -69,8 +69,8 @@ export class WatcherTool extends CoreTool<any> {
             // Type declarations for '${shortName}'
             import * as React from 'react';
 
-            type html = any;
-            
+            ${this.getHtmlTypeDef()}
+
             ${output.typeDeclarations.join('\n')}
             `
             .split('\n')
@@ -84,5 +84,17 @@ export class WatcherTool extends CoreTool<any> {
                 fs.unlinkSync(defFileName);
             }
         }
+    };
+
+    private getHtmlTypeDef = (): string => {
+        return `
+            export type html = {
+            \tinnerText: string;
+            \tinnerHtml: string;
+
+            \tcontent: ()=>string;
+            \tattr: (attrName: string)=>any;
+            };
+        `
     };
 }
