@@ -222,6 +222,9 @@ var Runtime = /** @class */ (function () {
                         var pckjson = JSON.parse(fs.readFileSync(fullPath + "/package.json", { encoding: "utf8" }));
                         if (pckjson.main) {
                             fullPath = path.join(fullPath, pckjson.main.split('.').slice(0, -1).join('.'));
+                            if (fullPath.endsWith(".aml.d")) {
+                                fullPath = fullPath.substr(0, fullPath.length - 2);
+                            }
                         }
                     }
                 }

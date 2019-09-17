@@ -320,6 +320,10 @@ export class Runtime {
                     const pckjson = JSON.parse(fs.readFileSync(fullPath + "/package.json", { encoding: "utf8" }));
                     if (pckjson.main) {
                         fullPath = path.join(fullPath, pckjson.main.split('.').slice(0, -1).join('.'));
+
+                        if (fullPath.endsWith(".aml.d")) {
+                            fullPath = fullPath.substr(0, fullPath.length - 2);
+                        }
                     }
                 }
             }
@@ -351,7 +355,9 @@ export class Runtime {
             }
             
             // Import other aml members
-            else if ((fullPath.endsWith('.aml') && fs.existsSync(fullPath)) || fs.existsSync(fullPath + '.aml')) {
+            else if (
+                (fullPath.endsWith('.aml') && fs.existsSync(fullPath)) || fs.existsSync(fullPath + '.aml')
+            ) {
 
                 let output: IRuntimeOutput = null;
                 if (Runtime._importCache[fullPath] === undefined) {
