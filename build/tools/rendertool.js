@@ -113,10 +113,12 @@ var RenderTool = /** @class */ (function (_super) {
                     });
                     // Watch for file changes
                     node_watch_1.default(_this.getProjPath(), { recursive: true }, function (eventType, fileName) {
-                        // Clear console
-                        process.stdout.write('\x1Bc');
-                        runtime_1.Runtime.clearStaticData();
-                        _this.buildAndRender(function (err, res) { });
+                        if (fileName.endsWith(".aml")) {
+                            // Clear console
+                            process.stdout.write('\x1Bc');
+                            runtime_1.Runtime.clearStaticData();
+                            _this.buildAndRender(function (err, res) { });
+                        }
                     });
                 }
             };

@@ -153,11 +153,13 @@ export class RenderTool extends CoreTool<any> {
                 // Watch for file changes
                 nodeWatch(this.getProjPath(), { recursive: true }, (eventType: "update" | "remove", fileName: string) => {
 
-                    // Clear console
-                    process.stdout.write('\x1Bc');
-    
-                    Runtime.clearStaticData();
-                    this.buildAndRender((err, res) => {});
+                    if (fileName.endsWith(".aml")) {
+                        // Clear console
+                        process.stdout.write('\x1Bc');
+        
+                        Runtime.clearStaticData();
+                        this.buildAndRender((err, res) => {});
+                    }
                 });
 
             }
