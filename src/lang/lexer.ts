@@ -12,6 +12,8 @@ export enum TokenType {
 
     SingleComment = "//",
     MultiComment = "/* */",
+    DocCommentStart = "/**",
+    CommentClose = "*/",
 
     Ident = "identifier",
     String = "string",
@@ -359,13 +361,14 @@ export class Lexer {
         }
     };
 
-    acceptUntil = (cb: (char: string)=>boolean): IToken => {
+    acceptUntil = (cb: (char: string, next?: string)=>boolean): IToken => {
         let tokenText = "";
 
         this._lastFind = null;
         this._position = this._templateContentStart;
         while (this._position < this._input.length) {
-            if (cb(this._input[this._position])) {
+            const next = this._position < this._input.length - 1 ? this._input[this._position + 1] : null;
+            if (cb(this._input[this._position], next)) {
                 return {
                     type: TokenType.TemplateText,
                     value: tokenText
@@ -781,8 +784,14 @@ export class Lexer {
                             this._position++;
                             state = TokenType.SingleComment;
                         } else if (next && next == '*') {
-                            this._position++;
-                            state = TokenType.MultiComment;
+                            next = (this._position < this._input.length - 2) ? this._input[this._position + 2] : null;
+                            if (next && next == '*') {
+                                this._position += 3;
+                                return { type: TokenType.DocCommentStart };
+                            } else {
+                                this._position++;
+                                state = TokenType.MultiComment;
+                            }
                         } else {
                             this._position++;
                             return { type: TokenType.Operator, value: '/' };
@@ -854,6 +863,9 @@ export class Lexer {
                         if (next && next == '=') {
                             this._position += 2;
                             return { type: TokenType.Operator, value: '*=' };
+                        } else if (next && next == '/') {
+                            this._position += 2;
+                            return { type: TokenType.CommentClose };
                         } else {
                             this._position++;
                             return { type: TokenType.Operator, value: '*' };

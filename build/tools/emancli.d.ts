@@ -10,6 +10,7 @@ interface ICommandInfo {
 export declare class EmanCLI {
     private _argv;
     private _validCommands;
+    isWatchingForTypes: boolean;
     constructor();
     displayError: (msg: string) => void;
     registerTool: <T extends CoreTool<any>>(id: string, tool: IToolType<T>, options?: IToolOptions) => void;
@@ -17,6 +18,7 @@ export declare class EmanCLI {
         [cmd: string]: ICommandInfo;
     };
     start: (cb?: (err: any, result: any) => void) => void;
+    private checkForFileWatch;
     private resolveConfigFile;
     private fixConfig;
     private validateConfig;

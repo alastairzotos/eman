@@ -24,6 +24,7 @@ export interface IRuntimeOutput {
         [name: string]: any;
     };
     testCases: StmtNode[];
+    typeDeclarations: string[];
 }
 export declare class Runtime {
     yieldedVars: IValues;

@@ -70,6 +70,7 @@ export class CoreTool<T = any> {
         this._exitHandler = handler;
     };
 
+
     displayToolDocs = (commandName: string) => {
         console.group(chalk.yellow(chalk.bold(commandName)));
         console.log('');

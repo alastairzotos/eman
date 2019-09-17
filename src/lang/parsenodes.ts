@@ -23,7 +23,9 @@ export enum NodeType {
     Var = "var",
     Lookup = "lookup",
     Const = "const",
-    Statement = "statement"
+    Statement = "statement",
+    DocComment = "doccomment",
+    Type = "type"
 }
 
 export class ParseNode {
@@ -77,9 +79,44 @@ export class LookupTableNode extends YieldNode {
         this.value = items;
     }
 
-
 }
 
+export interface IDocCommentParam {
+    name: string;
+    type: TypeNode;
+    desc: string;
+}
+
+export class DocCommentNode extends ParseNode {
+    public declType: "template"|"other";
+
+    public desc: string;
+    public params: IDocCommentParam[] = [];
+    public returnType: TypeNode = null;
+    public type_: TypeNode = null;
+
+    constructor() {
+        super(NodeType.DocComment);
+
+        this.declType = "other";
+    }
+
+    // Converts to a TS definition
+    toTSDef = (decl: string): string => {
+        if (this.declType == "template") {
+            return `export const ${decl}: React.FC<{ ${this.params.map(param => `${param.name}: ${param.type.toTSDef()}`).join(', ')} }>;`;
+        } else {
+            
+            if (this.params.length > 0) {
+                return `export const ${decl}: (${this.params.map(param => `${param.name}: ${param.type.toTSDef()}`).join(', ')})=>${this.returnType ? this.returnType.toTSDef() : 'any'};`;
+            } else if (this.type_) {
+                return `export const ${decl}: ${this.type_.toTSDef()};`;
+            } else {
+                return "";
+            }
+        }
+    };
+}
 
 //****************************************************
 // Statements
@@ -215,9 +252,19 @@ export class VarDeclStmt extends StmtNode {
     public value: ExprNode;
     public isConst: boolean = false;
 
+    public docComment: DocCommentNode = null;
+
     constructor() {
         super(StmtType.VarDecl);
     }
+
+    // Looks at value and tries to generate a doc comment from it if it's a const variable
+    generateOwnDocComment = () => {
+        if (!this.isConst) return;
+
+        this.docComment = new DocCommentNode();
+        this.docComment.type_ = this.value.tryCreateType();
+    };
 
     evaluate = (runtime: Runtime, args: IValues): any => {
         if (runtime.getScope()[this.name] !== undefined) {
@@ -426,6 +473,9 @@ export class ExprNode extends StmtNode {
         super(StmtType.Expr);
     }
 
+    // Tries to create a type from the expression, i.e. 42 -> number, {x: "hello"} -> {x: string}, etc
+    // Defaults to 'any'
+    tryCreateType = (): TypeNode => TypeNode.getBasicType("any");
 
     // Removes any parentheses
     unpack = (): ExprNode => {
@@ -443,6 +493,23 @@ export class ExprNode extends StmtNode {
 export class LitExpr extends ExprNode {
     constructor(public literal: any) {
         super(ExprType.Literal);
+    }
+
+    tryCreateType = (): TypeNode => {
+
+        if (typeof this.literal === "string") {
+            return TypeNode.getBasicType("string");
+        } else if (typeof this.literal === "number") {
+            return TypeNode.getBasicType("number");
+        } else if (this.literal === true) {
+            return TypeNode.getBasicType("boolean");
+        } else if (this.literal === false) {
+            return TypeNode.getBasicType("boolean");
+        } else if (this.literal === null) {
+            return TypeNode.getBasicType("any");
+        }
+
+        return null;
     }
 
     evaluate = (runtime: Runtime, args: IValues): any => {
@@ -530,6 +597,8 @@ export class ParExpr extends ExprNode {
     constructor(public expr: ExprNode) {
         super(ExprType.Parentheses);
     }
+
+    tryCreateType = (): TypeNode => new ParTypeNode(this.expr.tryCreateType());
 
     generateConditionValue = (runtime: Runtime, args: IValues): string => {
         return this.expr.generateConditionValue(runtime, args);
@@ -802,6 +871,22 @@ export class UnaryExpr extends ExprNode {
         super(ExprType.UnaryOp);
     }
 
+    tryCreateType = (): TypeNode => {
+        const exprType = this.expr.tryCreateType();
+
+        if (exprType.typeType == TypeNodeType.Literal) {
+            const litType = exprType as LiteralTypeNode;
+
+            if (litType.literal.type === TokenType.True) {
+                return new LiteralTypeNode({ type: TokenType.False, value: false });
+            } else if (litType.literal.type === TokenType.False) {
+                return new LiteralTypeNode({ type: TokenType.True, value: true });
+            }
+        }
+
+        return exprType;
+    };
+
     generateConditions = (runtime: Runtime, args: IValues, conditions: IRuleCondition[]): void => {
         try {
             runtime.checkForYieldedLoad(() => {
@@ -891,6 +976,16 @@ export class ObjExpr extends ExprNode {
         super(ExprType.Object);
     }
 
+    tryCreateType = (): TypeNode => {
+        const objType = new ObjectTypeNode();
+
+        Object.keys(this.values).forEach(key => {
+            objType.props[key] = this.values[key].tryCreateType();
+        })
+
+        return objType;
+    }
+
     evaluate = (runtime: Runtime, args: IValues): any => {
         const obj = {};
 
@@ -919,6 +1014,24 @@ export class ArrayExpr extends ExprNode {
 
     constructor() {
         super(ExprType.Array);
+    }
+
+    tryCreateType = (): TypeNode => {
+
+        if (this.values.length > 0) {
+
+            // If all the types are the same we can use that type
+            const allTypesSame = this.values
+                .map(value => value.tryCreateType())
+                .every((elemType, index, array) => elemType.matches(array[0]));
+
+            if (allTypesSame) {
+                return new ArrayTypeNode(this.values[0].tryCreateType());
+            }
+        }
+
+        // Default to 'any' array
+        return new ArrayTypeNode(TypeNode.getBasicType("any"));
     }
 
     evaluate = (runtime: Runtime, args: IValues): any => {
@@ -1309,6 +1422,20 @@ export class FuncExpr extends ExprNode {
         super(ExprType.Function);
     }
 
+    tryCreateType = (): TypeNode => {
+        const funcType = new FunctionTypeNode();
+        funcType.returnType = TypeNode.getBasicType("any");
+
+        for (let param of this.params) {
+            funcType.params.push({
+                name: param,
+                type: TypeNode.getBasicType("any")
+            })
+        }
+
+        return funcType;
+    }
+
     evaluate = (runtime: Runtime, args: IValues): any => {
         const closure = new FuncClosure();
         closure.funcExpr = this;
@@ -1373,6 +1500,24 @@ export class IfExpr extends ExprNode {
 
     constructor() {
         super(ExprType.IfRules);
+    }
+
+    tryCreateType = (): TypeNode => {
+        const unionType = new UnionTypeNode();
+
+        if (this.result.stmtType === StmtType.Expr) {
+            unionType.types.push((this.result as ExprNode).tryCreateType());
+        } else {
+            unionType.types.push(TypeNode.getBasicType("any"));
+        }
+
+        if (this.elseResult && this.elseResult.stmtType === StmtType.Expr) {
+            unionType.types.push((this.result as ExprNode).tryCreateType());
+        } else {
+            unionType.types.push(TypeNode.getBasicType("any"));
+        }
+
+        return unionType;
     }
 
     /*
@@ -1499,6 +1644,8 @@ export class HTMLExpr extends ExprNode {
     constructor(public htmlType: HTMLExprType) {
         super(ExprType.HTML);
     }
+
+    tryCreateType = (): TypeNode => TypeNode.getBasicType("html");
 
     content = () => "";
     public innerText = this.content();
@@ -1767,5 +1914,171 @@ export class TemplateNode extends ExprNode {
 
     evaluate = (runtime: Runtime, args: IValues): any => {
         return this.expressions.map(expr => expr.evaluate(runtime, args)).join('');
+    };
+}
+
+
+//****************************************************
+// Types
+//****************************************************
+
+export enum TypeNodeType {
+    Basic = "basic",
+    Parenthesised = "par",
+    Array = "array",
+    Object = "object",
+    Function = "function",
+    Union = "union",
+    Literal = "literal"
+}
+
+export class TypeNode extends ParseNode {
+    constructor(public typeType) {
+        super(NodeType.Type);
+    }
+
+    static _basicTypes: { [name: string]: BasicTypeNode } = {};
+    static getBasicType = (typeName: string): BasicTypeNode => {
+        if (TypeNode._basicTypes[typeName] === undefined) {
+            const newType = new BasicTypeNode(typeName);
+            TypeNode._basicTypes[typeName] = newType;
+
+            return newType;
+        } else {
+            return TypeNode._basicTypes[typeName];
+        }
+    };
+
+    matches = (otherType: TypeNode): boolean => false;
+
+    protected matchesType = <T extends TypeNode>(otherType: TypeNode, detail: (otherType: T)=>boolean): boolean => {
+        if (!otherType || this.typeType !== otherType.typeType) return false;
+
+        return detail(otherType as T);
+    };
+
+    toTSDef = () => "";
+}
+
+export class BasicTypeNode extends TypeNode {
+    constructor(public name: string) {
+        super(TypeNodeType.Basic);
+    }
+
+    matches = (otherType: TypeNode) => {
+        return this.matchesType<BasicTypeNode>(otherType, otherType => {
+            return this.name == otherType.name;
+        });
+    }
+
+    toTSDef = () => this.name;
+}
+
+export class ParTypeNode extends TypeNode {
+    constructor(public elem: TypeNode) {
+        super(TypeNodeType.Parenthesised);
+    }
+
+    matches = (otherType: TypeNode) => this.elem.matches(otherType);
+
+    toTSDef = () => `(${this.elem.toTSDef()})`;
+}
+
+export class ArrayTypeNode extends TypeNode {
+    constructor(public obj: TypeNode) {
+        super(TypeNodeType.Array);
+    }
+
+    matches = (otherType: TypeNode) => {
+        return this.matchesType<ArrayTypeNode>(otherType, otherType => {
+            return otherType.obj.matches(this.obj);
+        });
+    }
+
+    toTSDef = () => {
+        if (this.obj.typeType == TypeNodeType.Function || this.obj.typeType == TypeNodeType.Union) {
+            return `(${this.obj.toTSDef()})[]`;
+        } else {
+            return this.obj.toTSDef() + '[]';
+        }
+    }
+}
+
+export class ObjectTypeNode extends TypeNode {
+    public props: { [name: string]: TypeNode } = {};
+
+    constructor() {
+        super(TypeNodeType.Object);
+    }
+
+    matches = (otherType: TypeNode) => {
+        const this_ = this;
+        return this.matchesType<ObjectTypeNode>(otherType, otherType => {
+
+            return Object.keys(this_.props)
+                .every(name => {
+                    return otherType.props[name] !== undefined
+                        && otherType.props[name].matches(this_.props[name]);
+                });
+
+        });
+    };
+
+    toTSDef = () => `{ ${ Object.keys(this.props).map(propName => `${propName}: ${this.props[propName].toTSDef()}`).join(', ') } }`;
+}
+
+export interface IFuncParamType {
+    name: string;
+    type: TypeNode;
+}
+
+export class FunctionTypeNode extends TypeNode {
+    public params: IFuncParamType[] = [];
+    public returnType: TypeNode;
+
+    constructor() {
+        super(TypeNodeType.Function);
+    }
+
+    matches = (otherType: TypeNode) => {
+        return this.matchesType<FunctionTypeNode>(otherType, otherType => {
+            return this.returnType.matches(otherType.returnType)
+                && this.params.length === otherType.params.length
+                && this.params.reduce((prev, paramType, index) => {
+                    return prev
+                        && paramType.name == otherType.params[index].name
+                        && paramType.type.matches(otherType.params[index].type);
+                }, true)
+        });
+    }
+
+    toTSDef = () => `(${this.params.map(param => `${param.name}: ${param.type.toTSDef()}`).join(', ')})${this.returnType ? `=>${this.returnType.toTSDef()}` : ''}`;
+}
+
+export class UnionTypeNode extends TypeNode {
+    public types: TypeNode[] = [];
+
+    constructor() {
+        super(TypeNodeType.Union);
+    }
+
+    toTSDef = () => this.types.map(type => type.toTSDef()).join('|');
+}
+
+export class LiteralTypeNode extends TypeNode {
+    constructor(public literal: IToken) {
+        super(TypeNodeType.Literal);
+    }
+
+    toTSDef = () => {
+        switch (this.literal.type) {
+            case TokenType.String:      return `"${this.literal.value}"`;
+            case TokenType.Number:      return this.literal.value + '';
+            case TokenType.True:        return 'true';
+            case TokenType.False:       return 'false';
+            case TokenType.Null:        return 'null';
+        }
+
+        return "";
     };
 }

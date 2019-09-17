@@ -34,9 +34,19 @@ var Parser = /** @class */ (function () {
             var rootNode = new parsenodes_1.RootNode();
             _this._lexer = new lexer_1.Lexer(fileName, input);
             rootNode.startPosition = _this._lexer.getStartPosition();
+            var docComment = null;
             var _loop_1 = function () {
+                // Check for doc comments
+                if (_this._lexer.check(lexer_1.TokenType.DocCommentStart)) {
+                    if (!docComment) {
+                        docComment = _this.parseDocComment();
+                    }
+                    else {
+                        throw new errors_1.CompilerError('Unexpected doc comment', _this._lexer.getStartPosition());
+                    }
+                }
                 // Check for yields
-                if (_this._lexer.check(lexer_1.TokenType.KW_Yield)) {
+                else if (_this._lexer.check(lexer_1.TokenType.KW_Yield)) {
                     var yields_1 = _this.parseYields();
                     var yieldVars_1 = {};
                     var yieldLookups_1 = {};
@@ -57,11 +67,13 @@ var Parser = /** @class */ (function () {
                 }
                 // Exports
                 else if (_this._lexer.check(lexer_1.TokenType.KW_Export)) {
-                    rootNode.statements.push(_this.parseExport());
+                    rootNode.statements.push(_this.parseExport(docComment));
+                    docComment = null;
                 }
                 // Everything else
                 else {
-                    rootNode.statements.push(_this.parseStatement());
+                    rootNode.statements.push(_this.parseStatement(docComment));
+                    docComment = null;
                 }
             };
             while (_this._lexer.check()) {
@@ -70,9 +82,13 @@ var Parser = /** @class */ (function () {
             rootNode.endPosition = _this._lexer.getEndPosition();
             return rootNode;
         };
-        this.parseExport = function () {
+        this.parseExport = function (docComment) {
+            if (docComment === void 0) { docComment = null; }
             _this._lexer.accept(lexer_1.TokenType.KW_Export);
-            var statement = _this.parseStatement();
+            var statement = _this.parseStatement(docComment);
+            if (!docComment && statement.stmtType == parsenodes_1.StmtType.VarDecl) {
+                statement.generateOwnDocComment();
+            }
             statement.setExported();
             return statement;
         };
@@ -150,20 +166,126 @@ var Parser = /** @class */ (function () {
             }
             return varNode;
         };
-        this.parseStatement = function () {
+        this.parseDocCommentParam = function () {
+            if (!_this._lexer.checkIdent("param"))
+                return null;
+            _this._lexer.acceptIdent("param");
+            var param = {
+                name: "",
+                type: null,
+                desc: ""
+            };
+            param.name = _this._lexer.accept(lexer_1.TokenType.Ident).value;
+            //this._lexer.accept(TokenType.ParOpen);
+            param.type = _this.parseType();
+            //this._lexer.accept(TokenType.ParClose);
+            _this._lexer.check();
+            _this._lexer.setTemplateContentStart(_this._lexer.getEndPosition().position);
+            param.desc = _this._lexer.acceptUntil(function (char, next) {
+                return char == '\n';
+            }).value.trim();
+            // Eat the following '*'
+            if (_this._lexer.checkOp('*')) {
+                _this._lexer.accept();
+            }
+            return param;
+        };
+        this.parseDocCommentReturn = function () {
+            if (!_this._lexer.checkIdent("returns"))
+                return null;
+            _this._lexer.acceptIdent("returns");
+            return _this.parseType();
+        };
+        this.parseDocCommentAttribute = function (onParam, onReturn, onOther) {
+            _this._lexer.accept(lexer_1.TokenType.At);
+            if (_this._lexer.checkIdent("param")) {
+                onParam(_this.parseDocCommentParam());
+            }
+            else if (_this._lexer.checkIdent("returns")) {
+                onReturn(_this.parseDocCommentReturn());
+            }
+            else if (_this._lexer.check(lexer_1.TokenType.Ident)) {
+                onOther(_this._lexer.accept().value);
+            }
+            else {
+                throw new errors_1.CompilerError("Invalid doc comment attribute", _this._lexer.getStartPosition());
+            }
+        };
+        this.parseDocComment = function () {
+            _this._lexer.accept(lexer_1.TokenType.DocCommentStart);
+            _this._lexer.check();
+            _this._lexer.setTemplateContentStart(_this._lexer.getEndPosition().position);
+            var docComment = new parsenodes_1.DocCommentNode();
+            docComment.startPosition = _this._lexer.getStartPosition();
+            // Get description
+            docComment.desc = _this._lexer.acceptUntil(function (char, next) {
+                return char == '@' || (char + next == '*/');
+            }).value
+                .replace(/(\n \*)/g, '\n')
+                .split('\n')
+                .map(function (line) { return line.trim(); })
+                .join('\n')
+                .trim();
+            while (_this._lexer.check(lexer_1.TokenType.At)) {
+                _this.parseDocCommentAttribute(function (param) {
+                    docComment.params.push(param);
+                }, function (returnType) {
+                    if (!docComment.returnType) {
+                        docComment.returnType = returnType;
+                    }
+                    else {
+                        throw new errors_1.CompilerError("Doc comment already has a return type", returnType.startPosition);
+                    }
+                }, function (attrName) {
+                    if (attrName == "template") {
+                        docComment.declType = "template";
+                        // Eat the following '*'
+                        if (_this._lexer.checkOp('*')) {
+                            _this._lexer.accept();
+                        }
+                    }
+                    else {
+                        throw new errors_1.CompilerError("Invalid doc comment attribute", _this._lexer.getStartPosition());
+                    }
+                });
+            }
+            // Eat the rest of the '*'s
+            while (_this._lexer.checkOp('*')) {
+                _this._lexer.accept();
+            }
+            // Eat the rest of the '*'s
+            while (_this._lexer.checkOp('*')) {
+                _this._lexer.accept();
+            }
+            _this._lexer.accept(lexer_1.TokenType.CommentClose);
+            docComment.endPosition = _this._lexer.getEndPosition();
+            return docComment;
+        };
+        this.parseStatement = function (docComment) {
+            if (docComment === void 0) { docComment = null; }
             switch (_this._lexer.check().type) {
+                // Declarations
+                // All of them resolve to a var decl as they just apply syntactic sugar
+                case lexer_1.TokenType.KW_Var:
+                case lexer_1.TokenType.KW_Let:
+                case lexer_1.TokenType.KW_Const:
+                case lexer_1.TokenType.KW_Function:
+                case lexer_1.TokenType.KW_Class: {
+                    var decl = _this.parseDeclaration();
+                    if (docComment) {
+                        decl.docComment = docComment;
+                    }
+                    return decl;
+                }
+                // Empty statement
                 case lexer_1.TokenType.Semicolon:
                     _this._lexer.accept();
                     return new parsenodes_1.NoopStmt();
+                // Other statements
                 case lexer_1.TokenType.KW_Describe: return _this.parseDescribe();
                 case lexer_1.TokenType.KW_Return: return _this.parseReturn();
                 case lexer_1.TokenType.BraceOpen: return _this.parseBlock();
-                case lexer_1.TokenType.KW_Class: return _this.parseClassDecl();
                 case lexer_1.TokenType.KW_If: return _this.parseIf();
-                case lexer_1.TokenType.KW_Var:
-                case lexer_1.TokenType.KW_Let:
-                case lexer_1.TokenType.KW_Const: return _this.parseVarDecl();
-                case lexer_1.TokenType.KW_Function: return _this.parseFuncDecl();
                 case lexer_1.TokenType.KW_While: return _this.parseWhile();
                 case lexer_1.TokenType.KW_Do: return _this.parseDoWhile();
                 case lexer_1.TokenType.KW_For: {
@@ -190,6 +312,7 @@ var Parser = /** @class */ (function () {
                         }
                     }
                 }
+                // By default parse expressions
                 default: {
                     var expr = _this.parseExpression();
                     if (_this._lexer.check(lexer_1.TokenType.Semicolon)) {
@@ -201,6 +324,16 @@ var Parser = /** @class */ (function () {
                     }
                     return expr;
                 }
+            }
+        };
+        this.parseDeclaration = function () {
+            switch (_this._lexer.check().type) {
+                case lexer_1.TokenType.KW_Var:
+                case lexer_1.TokenType.KW_Let:
+                case lexer_1.TokenType.KW_Const: return _this.parseVarDecl();
+                case lexer_1.TokenType.KW_Function: return _this.parseFuncDecl();
+                case lexer_1.TokenType.KW_Class: return _this.parseClassDecl();
+                default: return null;
             }
         };
         this.parseDescribe = function () {
@@ -1142,6 +1275,150 @@ var Parser = /** @class */ (function () {
                 return result;
             }
             throw new errors_1.CompilerError("Unexpected token '" + _this._lexer.check().type + "'. Expected value", startPosition, _this._lexer.getEndPosition());
+        };
+        this.parseType = function () {
+            var type = _this.parseTypeWithoutUnions();
+            if (_this._lexer.checkOp('|')) {
+                _this._lexer.accept();
+                var unionType = new parsenodes_1.UnionTypeNode();
+                unionType.types.push(type);
+                unionType.types.push(_this.parseTypeWithoutUnions());
+                while (_this._lexer.checkOp('|')) {
+                    _this._lexer.accept();
+                    unionType.types.push(_this.parseTypeWithoutUnions());
+                }
+                return unionType;
+            }
+            else {
+                return type;
+            }
+        };
+        this.parseTypeWithoutUnions = function () {
+            var baseType = _this.parseTypeBase();
+            while (_this._lexer.check(lexer_1.TokenType.SquareOpen)) {
+                _this._lexer.accept();
+                _this._lexer.accept(lexer_1.TokenType.SquareClose);
+                var arrayType = new parsenodes_1.ArrayTypeNode(baseType);
+                baseType = arrayType;
+            }
+            return baseType;
+        };
+        // Includes functions
+        this.parseTypeBase = function () {
+            var revertPosition = _this._lexer.getPosition();
+            var startPosition = _this._lexer.getStartPosition();
+            try {
+                var funcTypeNode = new parsenodes_1.FunctionTypeNode();
+                funcTypeNode.startPosition = startPosition;
+                _this._lexer.accept(lexer_1.TokenType.ParOpen);
+                if (!_this._lexer.check(lexer_1.TokenType.ParClose)) {
+                    var name_1 = _this._lexer.accept(lexer_1.TokenType.Ident).value;
+                    _this._lexer.accept(lexer_1.TokenType.Colon);
+                    funcTypeNode.params.push({
+                        name: name_1,
+                        type: _this.parseType()
+                    });
+                    while (_this._lexer.check(lexer_1.TokenType.Comma)) {
+                        _this._lexer.accept();
+                        // Allow trailing comma
+                        if (_this._lexer.check(lexer_1.TokenType.ParClose)) {
+                            break;
+                        }
+                        name_1 = _this._lexer.accept(lexer_1.TokenType.Ident).value;
+                        _this._lexer.accept(lexer_1.TokenType.Colon);
+                        funcTypeNode.params.push({
+                            name: name_1,
+                            type: _this.parseType()
+                        });
+                    }
+                }
+                _this._lexer.accept(lexer_1.TokenType.ParClose);
+                _this._lexer.accept(lexer_1.TokenType.Arrow);
+                funcTypeNode.returnType = _this.parseType();
+                funcTypeNode.endPosition = _this._lexer.getEndPosition();
+                return funcTypeNode;
+            }
+            catch (e) {
+                if (!e.important) {
+                    try {
+                        _this._lexer.revert(startPosition);
+                        return _this.parseTypeBaseWithoutFunctions();
+                    }
+                    catch (e) {
+                        _this._lexer.revert(revertPosition);
+                        if (!e.important) {
+                            return _this.parseTypeBaseWithoutFunctions();
+                        }
+                        else {
+                            throw e;
+                        }
+                    }
+                }
+                else {
+                    throw e;
+                }
+            }
+            return null;
+        };
+        this.parseFunctionType = function () {
+            return null;
+        };
+        this.parseTypeBaseWithoutFunctions = function () {
+            if (_this._lexer.check(lexer_1.TokenType.Ident)) {
+                var ident = _this._lexer.accept(lexer_1.TokenType.Ident);
+                var typeNode = new parsenodes_1.BasicTypeNode(ident.value);
+                typeNode.startPosition = _this._lexer.getStartPosition();
+                typeNode.endPosition = _this._lexer.getEndPosition();
+                return typeNode;
+            }
+            else if (_this._lexer.check(lexer_1.TokenType.BraceOpen)) {
+                _this._lexer.accept();
+                var objType = new parsenodes_1.ObjectTypeNode();
+                objType.startPosition = _this._lexer.getStartPosition();
+                if (!_this._lexer.check(lexer_1.TokenType.BraceClose)) {
+                    var propName = _this._lexer.accept(lexer_1.TokenType.Ident).value;
+                    _this._lexer.accept(lexer_1.TokenType.Colon);
+                    objType.props[propName] = _this.parseType();
+                    while (_this._lexer.check(lexer_1.TokenType.Comma) || _this._lexer.check(lexer_1.TokenType.Semicolon)) {
+                        _this._lexer.accept();
+                        // Allow trailing comma
+                        if (_this._lexer.check(lexer_1.TokenType.BraceClose)) {
+                            break;
+                        }
+                        propName = _this._lexer.accept(lexer_1.TokenType.Ident).value;
+                        _this._lexer.accept(lexer_1.TokenType.Colon);
+                        objType.props[propName] = _this.parseType();
+                    }
+                }
+                _this._lexer.accept(lexer_1.TokenType.BraceClose);
+                objType.endPosition = _this._lexer.getEndPosition();
+                return objType;
+            }
+            else if (_this._lexer.check(lexer_1.TokenType.ParOpen)) {
+                _this._lexer.accept();
+                var elemType = _this.parseType();
+                var parType = new parsenodes_1.ParTypeNode(elemType);
+                _this._lexer.accept(lexer_1.TokenType.ParClose);
+                return parType;
+            }
+            else {
+                var startPosition = _this._lexer.getStartPosition();
+                switch (_this._lexer.check().type) {
+                    case lexer_1.TokenType.String:
+                    case lexer_1.TokenType.Number:
+                    case lexer_1.TokenType.True:
+                    case lexer_1.TokenType.False:
+                    case lexer_1.TokenType.Null:
+                        {
+                            var litType = new parsenodes_1.LiteralTypeNode(_this._lexer.accept());
+                            litType.startPosition = startPosition;
+                            litType.endPosition = _this._lexer.getEndPosition();
+                            return litType;
+                        }
+                    default:
+                        throw new errors_1.CompilerError("Expected 'ident', '{', '(', or literal", _this._lexer.getStartPosition());
+                }
+            }
         };
     }
     return Parser;

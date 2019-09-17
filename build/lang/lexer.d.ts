@@ -8,6 +8,8 @@ export declare enum TokenType {
     None = "none",
     SingleComment = "//",
     MultiComment = "/* */",
+    DocCommentStart = "/**",
+    CommentClose = "*/",
     Ident = "identifier",
     String = "string",
     Integer = "int",
@@ -102,7 +104,7 @@ export declare class Lexer {
     acceptOp: (opType: string) => IToken;
     acceptIdent: (ident: string) => IToken;
     acceptAny: (types?: TokenType[]) => IToken;
-    acceptUntil: (cb: (char: string) => boolean) => IToken;
+    acceptUntil: (cb: (char: string, next?: string) => boolean) => IToken;
     acceptHTMLAttribute: () => IToken;
     acceptHTMLText: (stopForExpressions?: boolean) => IToken;
     acceptTemplateText: () => IToken;

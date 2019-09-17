@@ -1,4 +1,4 @@
-import { RootNode, ExprNode, HTMLExpr, StmtNode, ReturnStmt, BlockStmt, VarDeclStmt, WhileStmt, ForStmt, ForOfStmt, DoWhileStmt, DescribeNode, RunNode, HTMLDoc, TemplateNode, RunTestNode, RunTodoNode } from './parsenodes';
+import { RootNode, ExprNode, HTMLExpr, StmtNode, ReturnStmt, BlockStmt, VarDeclStmt, WhileStmt, ForStmt, ForOfStmt, DoWhileStmt, DescribeNode, RunNode, HTMLDoc, TemplateNode, RunTestNode, RunTodoNode, DocCommentNode, IDocCommentParam, TypeNode, FunctionTypeNode } from './parsenodes';
 export declare class Parser {
     private _lexer;
     constructor();
@@ -9,7 +9,12 @@ export declare class Parser {
     private parseImport;
     private parseYields;
     private parseYield;
-    parseStatement: () => StmtNode;
+    parseDocCommentParam: () => IDocCommentParam;
+    parseDocCommentReturn: () => TypeNode;
+    parseDocCommentAttribute: (onParam: (param: IDocCommentParam) => void, onReturn: (typeNode: TypeNode) => void, onOther: (attrName: string) => void) => void;
+    parseDocComment: () => DocCommentNode;
+    parseStatement: (docComment?: DocCommentNode) => StmtNode;
+    parseDeclaration: () => VarDeclStmt;
     parseDescribe: () => DescribeNode;
     parseTestOrTodo: () => RunNode;
     parseTodoRun: () => RunTodoNode;
@@ -33,4 +38,9 @@ export declare class Parser {
     private parseIf;
     private parseExpressionNormally;
     private parseValue;
+    parseType: () => TypeNode;
+    parseTypeWithoutUnions: () => TypeNode;
+    parseTypeBase: () => TypeNode;
+    parseFunctionType: () => FunctionTypeNode;
+    parseTypeBaseWithoutFunctions: () => TypeNode;
 }

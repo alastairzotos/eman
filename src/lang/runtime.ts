@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as pretty from 'pretty';
 
 import { RuntimeError, displayError, CompilerError } from './errors';
-import { RootNode, ParseNode, ExprNode, FuncExpr, ImportNode, VarDeclStmt, StmtNode } from './parsenodes';
+import { RootNode, ParseNode, ExprNode, FuncExpr, ImportNode, VarDeclStmt, StmtNode, StmtType } from './parsenodes';
 import { Parser } from './parser';
 import { IVarConfig, IRuleCondition, createRuleConditions, IVarRule } from './varconfig';
 import { FuncClosure } from './closure';
@@ -25,6 +25,8 @@ export interface IRuntimeOutput {
     intermediates: { [name: string]: IVarConfig };
     exports: { [name: string]: any };
     testCases: StmtNode[];
+
+    typeDeclarations: string[];
 }
 
 export class Runtime {
@@ -81,6 +83,7 @@ export class Runtime {
 
     run = (file: string): IRuntimeOutput => {
 
+        const fileName = file.split('/').pop().split('.').slice(0, -1).join('.');
         const filePath = file.split('/').slice(0, -1).join('/');
 
         try {
@@ -104,7 +107,8 @@ export class Runtime {
             // Collect parsed members
             this.collectObjects(rootNode);
 
-            // Evaluate all statements
+            // Evaluate all statements, add exports and type declarations
+            const typeDeclarations: string[] = [];
             for (let statement of rootNode.statements) {
                 statement.evaluate(this, {});
 
@@ -112,6 +116,15 @@ export class Runtime {
                 if (statement.isExported()) {
                     const varDecl = statement as VarDeclStmt;
                     this._exports[varDecl.name] = this.getScope()[varDecl.name];
+                }
+
+                // Add type declaration
+                if (statement.stmtType == StmtType.VarDecl) {
+                    const varDecl = statement as VarDeclStmt;
+
+                    if (varDecl.docComment) {
+                        typeDeclarations.push(varDecl.docComment.toTSDef(varDecl.name));
+                    }
                 }
             }
 
@@ -137,8 +150,8 @@ export class Runtime {
                 exports: this._exports,
                 lookupTables: Runtime.lookupTables,
                 yieldLookups: Runtime.yieldLookups,
-
-                testCases: this._tests
+                testCases: this._tests,
+                typeDeclarations
             };
 
         } catch (e) {

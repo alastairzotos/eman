@@ -35,6 +35,7 @@ var Runtime = /** @class */ (function () {
         this._tests = [];
         this.run = function (file) {
             var _a;
+            var fileName = file.split('/').pop().split('.').slice(0, -1).join('.');
             var filePath = file.split('/').slice(0, -1).join('/');
             try {
                 var parser = new parser_1.Parser();
@@ -51,7 +52,8 @@ var Runtime = /** @class */ (function () {
                 _this_1.handleImports(filePath, rootNode.imports);
                 // Collect parsed members
                 _this_1.collectObjects(rootNode);
-                // Evaluate all statements
+                // Evaluate all statements, add exports and type declarations
+                var typeDeclarations = [];
                 for (var _i = 0, _b = rootNode.statements; _i < _b.length; _i++) {
                     var statement = _b[_i];
                     statement.evaluate(_this_1, {});
@@ -59,6 +61,13 @@ var Runtime = /** @class */ (function () {
                     if (statement.isExported()) {
                         var varDecl = statement;
                         _this_1._exports[varDecl.name] = _this_1.getScope()[varDecl.name];
+                    }
+                    // Add type declaration
+                    if (statement.stmtType == parsenodes_1.StmtType.VarDecl) {
+                        var varDecl = statement;
+                        if (varDecl.docComment) {
+                            typeDeclarations.push(varDecl.docComment.toTSDef(varDecl.name));
+                        }
                     }
                 }
                 // If we have a main function then run it and get returned value
@@ -80,7 +89,8 @@ var Runtime = /** @class */ (function () {
                     exports: _this_1._exports,
                     lookupTables: Runtime.lookupTables,
                     yieldLookups: Runtime.yieldLookups,
-                    testCases: _this_1._tests
+                    testCases: _this_1._tests,
+                    typeDeclarations: typeDeclarations
                 };
             }
             catch (e) {

@@ -1,8 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
+import * as readline from 'readline';
+import * as child_process from 'child_process';
 
 import { IConfig, CoreTool, CLI_CMD } from './coretool';
+import { WatcherTool } from './watcher';
 
 
 type IToolType<T extends CoreTool> = new(program: EmanCLI, config: IConfig, argv: string[]) => T;
@@ -20,6 +23,8 @@ export class EmanCLI {
     
     private _argv: string[];
     private _validCommands: { [cmd: string]: ICommandInfo } = {};
+
+    public isWatchingForTypes: boolean = false;
 
     constructor() {
         this._argv = process.argv.slice(2);
@@ -55,7 +60,17 @@ export class EmanCLI {
 
                 if (options.requiresConfig) {
                     this.resolveConfigFile((config: IConfig) => {
-                        new tool(this, config, this._argv).run(onComplete);
+                        new tool(this, config, this._argv).run((err, result) => {
+                            /*if (err) {
+                                cb(err, null);
+                            } else {
+                                this.checkForFileWatch(config, (err, result) => {
+                                    onComplete(err, result);
+                                })
+                            }*/
+
+                            onComplete(err, result);
+                        });
                     });
                 } else {
                     new tool(this, null, this._argv).run(onComplete);
@@ -65,6 +80,23 @@ export class EmanCLI {
             }
         }
     };
+
+    private checkForFileWatch = (config: IConfig, cb: (err: any, result: any)=>void) => {
+        if (!this.isWatchingForTypes) {
+            const rl = readline.createInterface(process.stdin, process.stdout);
+            rl.question(chalk.yellow("Would you like to watch files for changes to keep track of types? ") + chalk.white("(y/n) "), answer => {
+                if (answer.trim().toLowerCase() == "y") {
+                    console.log("");
+
+                    const watcher = new WatcherTool(this, config, this._argv);
+                    watcher.run(cb);
+                }
+                rl.close();
+            });
+        } else {
+            cb(null, null);
+        }
+    }
 
     private resolveConfigFile = (success: (config: IConfig)=>void) => {
         let configFile = 'config.json';

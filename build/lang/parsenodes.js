@@ -46,6 +46,8 @@ var NodeType;
     NodeType["Lookup"] = "lookup";
     NodeType["Const"] = "const";
     NodeType["Statement"] = "statement";
+    NodeType["DocComment"] = "doccomment";
+    NodeType["Type"] = "type";
 })(NodeType = exports.NodeType || (exports.NodeType = {}));
 var ParseNode = /** @class */ (function () {
     function ParseNode(type) {
@@ -97,6 +99,36 @@ var LookupTableNode = /** @class */ (function (_super) {
     return LookupTableNode;
 }(YieldNode));
 exports.LookupTableNode = LookupTableNode;
+var DocCommentNode = /** @class */ (function (_super) {
+    __extends(DocCommentNode, _super);
+    function DocCommentNode() {
+        var _this_1 = _super.call(this, NodeType.DocComment) || this;
+        _this_1.params = [];
+        _this_1.returnType = null;
+        _this_1.type_ = null;
+        // Converts to a TS definition
+        _this_1.toTSDef = function (decl) {
+            if (_this_1.declType == "template") {
+                return "export const " + decl + ": React.FC<{ " + _this_1.params.map(function (param) { return param.name + ": " + param.type.toTSDef(); }).join(', ') + " }>;";
+            }
+            else {
+                if (_this_1.params.length > 0) {
+                    return "export const " + decl + ": (" + _this_1.params.map(function (param) { return param.name + ": " + param.type.toTSDef(); }).join(', ') + ")=>" + (_this_1.returnType ? _this_1.returnType.toTSDef() : 'any') + ";";
+                }
+                else if (_this_1.type_) {
+                    return "export const " + decl + ": " + _this_1.type_.toTSDef() + ";";
+                }
+                else {
+                    return "";
+                }
+            }
+        };
+        _this_1.declType = "other";
+        return _this_1;
+    }
+    return DocCommentNode;
+}(ParseNode));
+exports.DocCommentNode = DocCommentNode;
 //****************************************************
 // Statements
 //****************************************************
@@ -233,6 +265,14 @@ var VarDeclStmt = /** @class */ (function (_super) {
     function VarDeclStmt() {
         var _this_1 = _super.call(this, StmtType.VarDecl) || this;
         _this_1.isConst = false;
+        _this_1.docComment = null;
+        // Looks at value and tries to generate a doc comment from it if it's a const variable
+        _this_1.generateOwnDocComment = function () {
+            if (!_this_1.isConst)
+                return;
+            _this_1.docComment = new DocCommentNode();
+            _this_1.docComment.type_ = _this_1.value.tryCreateType();
+        };
         _this_1.evaluate = function (runtime, args) {
             if (runtime.getScope()[_this_1.name] !== undefined) {
                 throw new errors_1.CompilerError("Redefinition of '" + _this_1.name + "'", _this_1.startPosition, _this_1.endPosition);
@@ -435,6 +475,9 @@ var ExprNode = /** @class */ (function (_super) {
     function ExprNode(exprType) {
         var _this_1 = _super.call(this, StmtType.Expr) || this;
         _this_1.exprType = exprType;
+        // Tries to create a type from the expression, i.e. 42 -> number, {x: "hello"} -> {x: string}, etc
+        // Defaults to 'any'
+        _this_1.tryCreateType = function () { return TypeNode.getBasicType("any"); };
         // Removes any parentheses
         _this_1.unpack = function () {
             var expr = _this_1;
@@ -453,6 +496,24 @@ var LitExpr = /** @class */ (function (_super) {
     function LitExpr(literal) {
         var _this_1 = _super.call(this, ExprType.Literal) || this;
         _this_1.literal = literal;
+        _this_1.tryCreateType = function () {
+            if (typeof _this_1.literal === "string") {
+                return TypeNode.getBasicType("string");
+            }
+            else if (typeof _this_1.literal === "number") {
+                return TypeNode.getBasicType("number");
+            }
+            else if (_this_1.literal === true) {
+                return TypeNode.getBasicType("boolean");
+            }
+            else if (_this_1.literal === false) {
+                return TypeNode.getBasicType("boolean");
+            }
+            else if (_this_1.literal === null) {
+                return TypeNode.getBasicType("any");
+            }
+            return null;
+        };
         _this_1.evaluate = function (runtime, args) {
             return _this_1.literal;
         };
@@ -533,6 +594,7 @@ var ParExpr = /** @class */ (function (_super) {
     function ParExpr(expr) {
         var _this_1 = _super.call(this, ExprType.Parentheses) || this;
         _this_1.expr = expr;
+        _this_1.tryCreateType = function () { return new ParTypeNode(_this_1.expr.tryCreateType()); };
         _this_1.generateConditionValue = function (runtime, args) {
             return _this_1.expr.generateConditionValue(runtime, args);
         };
@@ -755,6 +817,19 @@ var UnaryExpr = /** @class */ (function (_super) {
         var _this_1 = _super.call(this, ExprType.UnaryOp) || this;
         _this_1.opType = opType;
         _this_1.postFix = null;
+        _this_1.tryCreateType = function () {
+            var exprType = _this_1.expr.tryCreateType();
+            if (exprType.typeType == TypeNodeType.Literal) {
+                var litType = exprType;
+                if (litType.literal.type === lexer_1.TokenType.True) {
+                    return new LiteralTypeNode({ type: lexer_1.TokenType.False, value: false });
+                }
+                else if (litType.literal.type === lexer_1.TokenType.False) {
+                    return new LiteralTypeNode({ type: lexer_1.TokenType.True, value: true });
+                }
+            }
+            return exprType;
+        };
         _this_1.generateConditions = function (runtime, args, conditions) {
             try {
                 runtime.checkForYieldedLoad(function () {
@@ -869,6 +944,13 @@ var ObjExpr = /** @class */ (function (_super) {
     function ObjExpr() {
         var _this_1 = _super.call(this, ExprType.Object) || this;
         _this_1.values = {};
+        _this_1.tryCreateType = function () {
+            var objType = new ObjectTypeNode();
+            Object.keys(_this_1.values).forEach(function (key) {
+                objType.props[key] = _this_1.values[key].tryCreateType();
+            });
+            return objType;
+        };
         _this_1.evaluate = function (runtime, args) {
             var obj = {};
             Object.keys(_this_1.values).forEach(function (key) {
@@ -897,6 +979,19 @@ var ArrayExpr = /** @class */ (function (_super) {
     function ArrayExpr() {
         var _this_1 = _super.call(this, ExprType.Array) || this;
         _this_1.values = [];
+        _this_1.tryCreateType = function () {
+            if (_this_1.values.length > 0) {
+                // If all the types are the same we can use that type
+                var allTypesSame = _this_1.values
+                    .map(function (value) { return value.tryCreateType(); })
+                    .every(function (elemType, index, array) { return elemType.matches(array[0]); });
+                if (allTypesSame) {
+                    return new ArrayTypeNode(_this_1.values[0].tryCreateType());
+                }
+            }
+            // Default to 'any' array
+            return new ArrayTypeNode(TypeNode.getBasicType("any"));
+        };
         _this_1.evaluate = function (runtime, args) {
             var array = _this_1.values.map(function (val) { return val.evaluate(runtime, args); });
             return array;
@@ -1241,6 +1336,18 @@ var FuncExpr = /** @class */ (function (_super) {
     function FuncExpr() {
         var _this_1 = _super.call(this, ExprType.Function) || this;
         _this_1.params = [];
+        _this_1.tryCreateType = function () {
+            var funcType = new FunctionTypeNode();
+            funcType.returnType = TypeNode.getBasicType("any");
+            for (var _i = 0, _a = _this_1.params; _i < _a.length; _i++) {
+                var param = _a[_i];
+                funcType.params.push({
+                    name: param,
+                    type: TypeNode.getBasicType("any")
+                });
+            }
+            return funcType;
+        };
         _this_1.evaluate = function (runtime, args) {
             var closure = new closure_1.FuncClosure();
             closure.funcExpr = _this_1;
@@ -1294,6 +1401,22 @@ var IfExpr = /** @class */ (function (_super) {
     __extends(IfExpr, _super);
     function IfExpr() {
         var _this_1 = _super.call(this, ExprType.IfRules) || this;
+        _this_1.tryCreateType = function () {
+            var unionType = new UnionTypeNode();
+            if (_this_1.result.stmtType === StmtType.Expr) {
+                unionType.types.push(_this_1.result.tryCreateType());
+            }
+            else {
+                unionType.types.push(TypeNode.getBasicType("any"));
+            }
+            if (_this_1.elseResult && _this_1.elseResult.stmtType === StmtType.Expr) {
+                unionType.types.push(_this_1.result.tryCreateType());
+            }
+            else {
+                unionType.types.push(TypeNode.getBasicType("any"));
+            }
+            return unionType;
+        };
         /*
         Explicitly states that the if-statement is an expression.
     
@@ -1407,6 +1530,7 @@ var HTMLExpr = /** @class */ (function (_super) {
     function HTMLExpr(htmlType) {
         var _this_1 = _super.call(this, ExprType.HTML) || this;
         _this_1.htmlType = htmlType;
+        _this_1.tryCreateType = function () { return TypeNode.getBasicType("html"); };
         _this_1.content = function () { return ""; };
         _this_1.innerText = _this_1.content();
         _this_1.innerHTML = "";
@@ -1655,4 +1779,170 @@ var TemplateNode = /** @class */ (function (_super) {
     return TemplateNode;
 }(ExprNode));
 exports.TemplateNode = TemplateNode;
+//****************************************************
+// Types
+//****************************************************
+var TypeNodeType;
+(function (TypeNodeType) {
+    TypeNodeType["Basic"] = "basic";
+    TypeNodeType["Parenthesised"] = "par";
+    TypeNodeType["Array"] = "array";
+    TypeNodeType["Object"] = "object";
+    TypeNodeType["Function"] = "function";
+    TypeNodeType["Union"] = "union";
+    TypeNodeType["Literal"] = "literal";
+})(TypeNodeType = exports.TypeNodeType || (exports.TypeNodeType = {}));
+var TypeNode = /** @class */ (function (_super) {
+    __extends(TypeNode, _super);
+    function TypeNode(typeType) {
+        var _this_1 = _super.call(this, NodeType.Type) || this;
+        _this_1.typeType = typeType;
+        _this_1.matches = function (otherType) { return false; };
+        _this_1.matchesType = function (otherType, detail) {
+            if (!otherType || _this_1.typeType !== otherType.typeType)
+                return false;
+            return detail(otherType);
+        };
+        _this_1.toTSDef = function () { return ""; };
+        return _this_1;
+    }
+    TypeNode._basicTypes = {};
+    TypeNode.getBasicType = function (typeName) {
+        if (TypeNode._basicTypes[typeName] === undefined) {
+            var newType = new BasicTypeNode(typeName);
+            TypeNode._basicTypes[typeName] = newType;
+            return newType;
+        }
+        else {
+            return TypeNode._basicTypes[typeName];
+        }
+    };
+    return TypeNode;
+}(ParseNode));
+exports.TypeNode = TypeNode;
+var BasicTypeNode = /** @class */ (function (_super) {
+    __extends(BasicTypeNode, _super);
+    function BasicTypeNode(name) {
+        var _this_1 = _super.call(this, TypeNodeType.Basic) || this;
+        _this_1.name = name;
+        _this_1.matches = function (otherType) {
+            return _this_1.matchesType(otherType, function (otherType) {
+                return _this_1.name == otherType.name;
+            });
+        };
+        _this_1.toTSDef = function () { return _this_1.name; };
+        return _this_1;
+    }
+    return BasicTypeNode;
+}(TypeNode));
+exports.BasicTypeNode = BasicTypeNode;
+var ParTypeNode = /** @class */ (function (_super) {
+    __extends(ParTypeNode, _super);
+    function ParTypeNode(elem) {
+        var _this_1 = _super.call(this, TypeNodeType.Parenthesised) || this;
+        _this_1.elem = elem;
+        _this_1.matches = function (otherType) { return _this_1.elem.matches(otherType); };
+        _this_1.toTSDef = function () { return "(" + _this_1.elem.toTSDef() + ")"; };
+        return _this_1;
+    }
+    return ParTypeNode;
+}(TypeNode));
+exports.ParTypeNode = ParTypeNode;
+var ArrayTypeNode = /** @class */ (function (_super) {
+    __extends(ArrayTypeNode, _super);
+    function ArrayTypeNode(obj) {
+        var _this_1 = _super.call(this, TypeNodeType.Array) || this;
+        _this_1.obj = obj;
+        _this_1.matches = function (otherType) {
+            return _this_1.matchesType(otherType, function (otherType) {
+                return otherType.obj.matches(_this_1.obj);
+            });
+        };
+        _this_1.toTSDef = function () {
+            if (_this_1.obj.typeType == TypeNodeType.Function || _this_1.obj.typeType == TypeNodeType.Union) {
+                return "(" + _this_1.obj.toTSDef() + ")[]";
+            }
+            else {
+                return _this_1.obj.toTSDef() + '[]';
+            }
+        };
+        return _this_1;
+    }
+    return ArrayTypeNode;
+}(TypeNode));
+exports.ArrayTypeNode = ArrayTypeNode;
+var ObjectTypeNode = /** @class */ (function (_super) {
+    __extends(ObjectTypeNode, _super);
+    function ObjectTypeNode() {
+        var _this_1 = _super.call(this, TypeNodeType.Object) || this;
+        _this_1.props = {};
+        _this_1.matches = function (otherType) {
+            var this_ = _this_1;
+            return _this_1.matchesType(otherType, function (otherType) {
+                return Object.keys(this_.props)
+                    .every(function (name) {
+                    return otherType.props[name] !== undefined
+                        && otherType.props[name].matches(this_.props[name]);
+                });
+            });
+        };
+        _this_1.toTSDef = function () { return "{ " + Object.keys(_this_1.props).map(function (propName) { return propName + ": " + _this_1.props[propName].toTSDef(); }).join(', ') + " }"; };
+        return _this_1;
+    }
+    return ObjectTypeNode;
+}(TypeNode));
+exports.ObjectTypeNode = ObjectTypeNode;
+var FunctionTypeNode = /** @class */ (function (_super) {
+    __extends(FunctionTypeNode, _super);
+    function FunctionTypeNode() {
+        var _this_1 = _super.call(this, TypeNodeType.Function) || this;
+        _this_1.params = [];
+        _this_1.matches = function (otherType) {
+            return _this_1.matchesType(otherType, function (otherType) {
+                return _this_1.returnType.matches(otherType.returnType)
+                    && _this_1.params.length === otherType.params.length
+                    && _this_1.params.reduce(function (prev, paramType, index) {
+                        return prev
+                            && paramType.name == otherType.params[index].name
+                            && paramType.type.matches(otherType.params[index].type);
+                    }, true);
+            });
+        };
+        _this_1.toTSDef = function () { return "(" + _this_1.params.map(function (param) { return param.name + ": " + param.type.toTSDef(); }).join(', ') + ")" + (_this_1.returnType ? "=>" + _this_1.returnType.toTSDef() : ''); };
+        return _this_1;
+    }
+    return FunctionTypeNode;
+}(TypeNode));
+exports.FunctionTypeNode = FunctionTypeNode;
+var UnionTypeNode = /** @class */ (function (_super) {
+    __extends(UnionTypeNode, _super);
+    function UnionTypeNode() {
+        var _this_1 = _super.call(this, TypeNodeType.Union) || this;
+        _this_1.types = [];
+        _this_1.toTSDef = function () { return _this_1.types.map(function (type) { return type.toTSDef(); }).join('|'); };
+        return _this_1;
+    }
+    return UnionTypeNode;
+}(TypeNode));
+exports.UnionTypeNode = UnionTypeNode;
+var LiteralTypeNode = /** @class */ (function (_super) {
+    __extends(LiteralTypeNode, _super);
+    function LiteralTypeNode(literal) {
+        var _this_1 = _super.call(this, TypeNodeType.Literal) || this;
+        _this_1.literal = literal;
+        _this_1.toTSDef = function () {
+            switch (_this_1.literal.type) {
+                case lexer_1.TokenType.String: return "\"" + _this_1.literal.value + "\"";
+                case lexer_1.TokenType.Number: return _this_1.literal.value + '';
+                case lexer_1.TokenType.True: return 'true';
+                case lexer_1.TokenType.False: return 'false';
+                case lexer_1.TokenType.Null: return 'null';
+            }
+            return "";
+        };
+        return _this_1;
+    }
+    return LiteralTypeNode;
+}(TypeNode));
+exports.LiteralTypeNode = LiteralTypeNode;
 //# sourceMappingURL=parsenodes.js.map

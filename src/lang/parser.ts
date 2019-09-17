@@ -2,7 +2,7 @@ import * as fs from 'fs';
 
 import { CompilerError } from './errors';
 import { Lexer, TokenType, getOpPrecedence, getAsOp, isOp } from './lexer';
-import { RootNode, YieldNode, ExprNode, ExprType, AccessArrExpr, AccessObjExpr, CallExpr, ArrayExpr, ObjExpr, ParExpr, LoadExpr, LitExpr, OpExpr, UnaryExpr, FuncExpr, IfExpr, HTMLTextExpr, HTMLExpr, HTMLExprType, HTMLElemExpr, HTMLDynExpr, StmtNode, ReturnStmt, BlockStmt, VarDeclStmt, ImportNode, NoopStmt, WhileStmt, ForStmt, ForOfStmt, DoWhileStmt, MethodCallExpr, NewExpr, LookupTableNode, NodeType, DescribeNode, RunNode, HTMLDoc, TemplateNode, RunTestNode, RunTodoNode, StmtType, StmtList, HTMLDocType, HTMLComment } from './parsenodes';
+import { RootNode, YieldNode, ExprNode, ExprType, AccessArrExpr, AccessObjExpr, CallExpr, ArrayExpr, ObjExpr, ParExpr, LoadExpr, LitExpr, OpExpr, UnaryExpr, FuncExpr, IfExpr, HTMLTextExpr, HTMLExpr, HTMLExprType, HTMLElemExpr, HTMLDynExpr, StmtNode, ReturnStmt, BlockStmt, VarDeclStmt, ImportNode, NoopStmt, WhileStmt, ForStmt, ForOfStmt, DoWhileStmt, MethodCallExpr, NewExpr, LookupTableNode, NodeType, DescribeNode, RunNode, HTMLDoc, TemplateNode, RunTestNode, RunTodoNode, StmtType, StmtList, HTMLDocType, HTMLComment, DocCommentNode, IDocCommentParam, TypeNode, BasicTypeNode, ArrayTypeNode, ObjectTypeNode, ParTypeNode, UnionTypeNode, FunctionTypeNode, IFuncParamType, LiteralTypeNode } from './parsenodes';
 import { AlterianParser } from './alterianparser';
 
 
@@ -37,10 +37,21 @@ export class Parser {
 
         rootNode.startPosition = this._lexer.getStartPosition();
 
+        let docComment: DocCommentNode = null;
+
         while (this._lexer.check()) {
 
+            // Check for doc comments
+            if (this._lexer.check(TokenType.DocCommentStart)) {
+                if (!docComment) {
+                    docComment = this.parseDocComment();
+                } else {
+                    throw new CompilerError('Unexpected doc comment', this._lexer.getStartPosition());
+                }
+            }
+
             // Check for yields
-            if (this._lexer.check(TokenType.KW_Yield)) {
+            else if (this._lexer.check(TokenType.KW_Yield)) {
                 const yields = this.parseYields();
                 const yieldVars: { [name: string]: YieldNode } = {};
                 const yieldLookups: { [name: string]: LookupTableNode } = {};
@@ -64,12 +75,14 @@ export class Parser {
 
             // Exports
             else if (this._lexer.check(TokenType.KW_Export)) {
-                rootNode.statements.push(this.parseExport());
+                rootNode.statements.push(this.parseExport(docComment));
+                docComment = null;
             }
 
             // Everything else
             else {
-                rootNode.statements.push(this.parseStatement());
+                rootNode.statements.push(this.parseStatement(docComment));
+                docComment = null;
             }
         }
 
@@ -78,10 +91,14 @@ export class Parser {
         return rootNode;
     };
 
-    private parseExport = (): StmtNode => {
+    private parseExport = (docComment: DocCommentNode = null): StmtNode => {
         this._lexer.accept(TokenType.KW_Export);
 
-        const statement = this.parseStatement();
+        const statement = this.parseStatement(docComment);
+
+        if (!docComment && statement.stmtType == StmtType.VarDecl) {
+            (statement as VarDeclStmt).generateOwnDocComment();
+        } 
         statement.setExported();
 
         return statement;
@@ -190,18 +207,163 @@ export class Parser {
         return varNode;
     };
 
-    parseStatement = (): StmtNode => {
+    parseDocCommentParam = (): IDocCommentParam => {
+        if (!this._lexer.checkIdent("param")) return null;
+
+        this._lexer.acceptIdent("param");
+
+        const param: IDocCommentParam = {
+            name: "",
+            type: null,
+            desc: ""
+        };
+
+        param.name = this._lexer.accept(TokenType.Ident).value;
+
+        //this._lexer.accept(TokenType.ParOpen);
+
+        param.type = this.parseType();
+
+        //this._lexer.accept(TokenType.ParClose);
+
+        this._lexer.check();
+        this._lexer.setTemplateContentStart(this._lexer.getEndPosition().position);
+
+        param.desc = (
+            this._lexer.acceptUntil((char, next) => {
+                return char == '\n';
+            }).value as string
+        ).trim();
+
+
+        // Eat the following '*'
+        if (this._lexer.checkOp('*')) {
+            this._lexer.accept();
+        }
+
+        return param;
+    }
+
+    parseDocCommentReturn = (): TypeNode => {
+        if (!this._lexer.checkIdent("returns")) return null;
+
+        this._lexer.acceptIdent("returns");
+
+        return this.parseType();
+    }
+
+    parseDocCommentAttribute = (
+        onParam: (param: IDocCommentParam)=>void,
+        onReturn: (typeNode: TypeNode)=>void,
+        onOther: (attrName: string)=>void
+    ) => {
+        this._lexer.accept(TokenType.At);
+
+        if (this._lexer.checkIdent("param")) {
+            onParam(this.parseDocCommentParam());
+        } else if (this._lexer.checkIdent("returns")) {
+            onReturn(this.parseDocCommentReturn());
+        } else if (this._lexer.check(TokenType.Ident)) {
+            onOther(this._lexer.accept().value as string);
+        } else {
+            throw new CompilerError("Invalid doc comment attribute", this._lexer.getStartPosition());
+        }
+    };
+
+    parseDocComment = (): DocCommentNode => {
+        this._lexer.accept(TokenType.DocCommentStart);
+        this._lexer.check();
+        this._lexer.setTemplateContentStart(this._lexer.getEndPosition().position);
+
+        const docComment = new DocCommentNode();
+        docComment.startPosition = this._lexer.getStartPosition();
+
+        // Get description
+        docComment.desc = (
+            this._lexer.acceptUntil((char, next) => {
+                return char == '@' || (char + next == '*/');
+            }).value as string
+        )
+        .replace(/(\n \*)/g, '\n')
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n')
+        .trim();
+
+        while (this._lexer.check(TokenType.At)) {
+            this.parseDocCommentAttribute(
+                param => {
+                    docComment.params.push(param)
+                },
+
+                returnType => {
+                    if (!docComment.returnType) {
+                        docComment.returnType = returnType;
+                    } else {
+                        throw new CompilerError("Doc comment already has a return type", returnType.startPosition);
+                    }
+                },
+
+                attrName => {
+                    if (attrName == "template") {
+                        docComment.declType = "template";
+
+                        // Eat the following '*'
+                        if (this._lexer.checkOp('*')) {
+                            this._lexer.accept();
+                        }
+                    } else {
+                        throw new CompilerError("Invalid doc comment attribute", this._lexer.getStartPosition());
+                    }
+                }
+            )
+        }
+
+        // Eat the rest of the '*'s
+        while (this._lexer.checkOp('*')) {
+            this._lexer.accept();
+        }
+
+        // Eat the rest of the '*'s
+        while (this._lexer.checkOp('*')) {
+            this._lexer.accept();
+        }
+
+        this._lexer.accept(TokenType.CommentClose);
+
+        docComment.endPosition = this._lexer.getEndPosition();
+
+        return docComment;
+    }
+
+    parseStatement = (docComment: DocCommentNode = null): StmtNode => {
+
         switch (this._lexer.check().type) {
+
+            // Declarations
+            // All of them resolve to a var decl as they just apply syntactic sugar
+            case TokenType.KW_Var:
+            case TokenType.KW_Let:
+            case TokenType.KW_Const:
+            case TokenType.KW_Function:
+            case TokenType.KW_Class: {
+                const decl = this.parseDeclaration();
+
+                if (docComment) {
+                    decl.docComment = docComment;
+                }
+
+                return decl;
+            }
+
+            // Empty statement
             case TokenType.Semicolon:   this._lexer.accept(); return new NoopStmt();
+
+            // Other statements
             case TokenType.KW_Describe: return this.parseDescribe();
             case TokenType.KW_Return:   return this.parseReturn();
             case TokenType.BraceOpen:   return this.parseBlock();
-            case TokenType.KW_Class:    return this.parseClassDecl();
             case TokenType.KW_If:       return this.parseIf();
-            case TokenType.KW_Var:
-            case TokenType.KW_Let:
-            case TokenType.KW_Const:    return this.parseVarDecl();
-            case TokenType.KW_Function: return this.parseFuncDecl();
             case TokenType.KW_While:    return this.parseWhile();
             case TokenType.KW_Do:       return this.parseDoWhile();
             case TokenType.KW_For: {
@@ -229,6 +391,7 @@ export class Parser {
                 }
             }
 
+            // By default parse expressions
             default:    {
                 const expr = this.parseExpression();
 
@@ -242,6 +405,17 @@ export class Parser {
                 }
                 return expr;
             }
+        }
+    };
+
+    parseDeclaration = (): VarDeclStmt => {
+        switch (this._lexer.check().type) {
+            case TokenType.KW_Var:
+            case TokenType.KW_Let:
+            case TokenType.KW_Const:    return this.parseVarDecl();
+            case TokenType.KW_Function: return this.parseFuncDecl();
+            case TokenType.KW_Class:    return this.parseClassDecl();
+            default: return null;
         }
     };
 
@@ -1482,5 +1656,187 @@ export class Parser {
         }
 
         throw new CompilerError(`Unexpected token '${this._lexer.check().type}'. Expected value`, startPosition, this._lexer.getEndPosition());
+    };
+
+
+    parseType = (): TypeNode => {
+        let type = this.parseTypeWithoutUnions();
+
+        if (this._lexer.checkOp('|')) {
+            this._lexer.accept();
+
+            const unionType = new UnionTypeNode();
+            unionType.types.push(type);
+            unionType.types.push(this.parseTypeWithoutUnions());
+
+            while (this._lexer.checkOp('|')) {
+                this._lexer.accept();
+
+                unionType.types.push(this.parseTypeWithoutUnions());
+            }
+
+            return unionType;
+        } else {
+            return type;
+        }
+    };
+
+    parseTypeWithoutUnions = (): TypeNode => {
+        let baseType = this.parseTypeBase();
+
+        while (this._lexer.check(TokenType.SquareOpen)) {
+            this._lexer.accept();
+            this._lexer.accept(TokenType.SquareClose);
+
+            const arrayType = new ArrayTypeNode(baseType);
+            baseType = arrayType;
+        }
+
+        return baseType;
+    };
+
+    // Includes functions
+    parseTypeBase = (): TypeNode => {
+        const revertPosition = this._lexer.getPosition();
+        const startPosition = this._lexer.getStartPosition();
+
+        try {
+
+            const funcTypeNode = new FunctionTypeNode();
+            funcTypeNode.startPosition = startPosition;
+
+            this._lexer.accept(TokenType.ParOpen);
+
+            if (!this._lexer.check(TokenType.ParClose)) {
+                let name = this._lexer.accept(TokenType.Ident).value as string;
+                this._lexer.accept(TokenType.Colon);
+            
+                funcTypeNode.params.push({
+                    name,
+                    type: this.parseType()
+                });
+
+                while (this._lexer.check(TokenType.Comma)) {
+                    this._lexer.accept();
+
+                    // Allow trailing comma
+                    if (this._lexer.check(TokenType.ParClose)) {
+                        break;
+                    }
+
+                    name = this._lexer.accept(TokenType.Ident).value as string;
+                    this._lexer.accept(TokenType.Colon);
+                
+                    funcTypeNode.params.push({
+                        name,
+                        type: this.parseType()
+                    });
+                }
+            }
+
+            this._lexer.accept(TokenType.ParClose);
+
+            this._lexer.accept(TokenType.Arrow);
+
+            funcTypeNode.returnType = this.parseType();
+
+            funcTypeNode.endPosition = this._lexer.getEndPosition();
+            return funcTypeNode;
+        } catch (e) {
+            if (!e.important) {
+                try {
+                    this._lexer.revert(startPosition);
+                    return this.parseTypeBaseWithoutFunctions();
+                } catch (e) {
+                    this._lexer.revert(revertPosition);
+
+                    if (!e.important) {
+                        return this.parseTypeBaseWithoutFunctions();
+                    } else {
+                        throw e;
+                    }
+                }
+            } else {
+                throw e;
+            }
+        }
+
+        return null;
+    };
+
+    parseFunctionType = (): FunctionTypeNode => {
+
+        return null;
+    };
+
+    parseTypeBaseWithoutFunctions = (): TypeNode => {
+        if (this._lexer.check(TokenType.Ident)) {
+            const ident = this._lexer.accept(TokenType.Ident);
+
+            const typeNode = new BasicTypeNode(ident.value);
+            typeNode.startPosition = this._lexer.getStartPosition();
+            typeNode.endPosition = this._lexer.getEndPosition();
+
+            return typeNode;
+        } else if (this._lexer.check(TokenType.BraceOpen)) {
+            this._lexer.accept();
+            const objType = new ObjectTypeNode();
+            objType.startPosition = this._lexer.getStartPosition();
+
+            if (!this._lexer.check(TokenType.BraceClose)) {
+                let propName = this._lexer.accept(TokenType.Ident).value as string;
+                this._lexer.accept(TokenType.Colon);
+
+                objType.props[propName] = this.parseType();
+
+                while (this._lexer.check(TokenType.Comma) || this._lexer.check(TokenType.Semicolon)) {
+                    this._lexer.accept();
+
+                    // Allow trailing comma
+                    if (this._lexer.check(TokenType.BraceClose)) {
+                        break;
+                    }
+
+                    propName = this._lexer.accept(TokenType.Ident).value as string;
+                    this._lexer.accept(TokenType.Colon);
+
+                    objType.props[propName] = this.parseType();
+                }
+            }
+
+            this._lexer.accept(TokenType.BraceClose);
+
+            objType.endPosition = this._lexer.getEndPosition();
+            return objType;
+        } else if (this._lexer.check(TokenType.ParOpen)) {
+            this._lexer.accept();
+
+            const elemType = this.parseType();
+            const parType = new ParTypeNode(elemType);
+
+            this._lexer.accept(TokenType.ParClose);
+
+            return parType;
+        } else {
+            const startPosition = this._lexer.getStartPosition();
+
+            switch (this._lexer.check().type) {
+                case TokenType.String:
+                case TokenType.Number:
+                case TokenType.True:
+                case TokenType.False:
+                case TokenType.Null:
+                {
+                    const litType = new LiteralTypeNode(this._lexer.accept());
+                    litType.startPosition = startPosition;
+                    litType.endPosition = this._lexer.getEndPosition();
+                    
+                    return litType;
+                }
+
+                default:
+                    throw new CompilerError("Expected 'ident', '{', '(', or literal", this._lexer.getStartPosition());
+            }
+        }
     };
 }

@@ -18,6 +18,8 @@ var TokenType;
     TokenType["None"] = "none";
     TokenType["SingleComment"] = "//";
     TokenType["MultiComment"] = "/* */";
+    TokenType["DocCommentStart"] = "/**";
+    TokenType["CommentClose"] = "*/";
     TokenType["Ident"] = "identifier";
     TokenType["String"] = "string";
     TokenType["Integer"] = "int";
@@ -323,7 +325,8 @@ var Lexer = /** @class */ (function () {
             _this._lastFind = null;
             _this._position = _this._templateContentStart;
             while (_this._position < _this._input.length) {
-                if (cb(_this._input[_this._position])) {
+                var next = _this._position < _this._input.length - 1 ? _this._input[_this._position + 1] : null;
+                if (cb(_this._input[_this._position], next)) {
                     return {
                         type: TokenType.TemplateText,
                         value: tokenText
@@ -700,8 +703,15 @@ var Lexer = /** @class */ (function () {
                                 state = TokenType.SingleComment;
                             }
                             else if (next && next == '*') {
-                                _this._position++;
-                                state = TokenType.MultiComment;
+                                next = (_this._position < _this._input.length - 2) ? _this._input[_this._position + 2] : null;
+                                if (next && next == '*') {
+                                    _this._position += 3;
+                                    return { type: TokenType.DocCommentStart };
+                                }
+                                else {
+                                    _this._position++;
+                                    state = TokenType.MultiComment;
+                                }
                             }
                             else {
                                 _this._position++;
@@ -778,6 +788,10 @@ var Lexer = /** @class */ (function () {
                             if (next && next == '=') {
                                 _this._position += 2;
                                 return { type: TokenType.Operator, value: '*=' };
+                            }
+                            else if (next && next == '/') {
+                                _this._position += 2;
+                                return { type: TokenType.CommentClose };
                             }
                             else {
                                 _this._position++;

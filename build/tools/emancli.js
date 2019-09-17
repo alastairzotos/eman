@@ -14,11 +14,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var fs = require("fs");
 var path = require("path");
 var chalk_1 = require("chalk");
+var readline = require("readline");
 var coretool_1 = require("./coretool");
+var watcher_1 = require("./watcher");
 var EmanCLI = /** @class */ (function () {
     function EmanCLI() {
         var _this = this;
         this._validCommands = {};
+        this.isWatchingForTypes = false;
         this.displayError = function (msg) {
             console.log(chalk_1.default.red("Error: ") + msg);
         };
@@ -44,7 +47,16 @@ var EmanCLI = /** @class */ (function () {
                     var options = _this._validCommands[command].options;
                     if (options.requiresConfig) {
                         _this.resolveConfigFile(function (config) {
-                            new tool_1(_this, config, _this._argv).run(onComplete);
+                            new tool_1(_this, config, _this._argv).run(function (err, result) {
+                                /*if (err) {
+                                    cb(err, null);
+                                } else {
+                                    this.checkForFileWatch(config, (err, result) => {
+                                        onComplete(err, result);
+                                    })
+                                }*/
+                                onComplete(err, result);
+                            });
                         });
                     }
                     else {
@@ -54,6 +66,22 @@ var EmanCLI = /** @class */ (function () {
                 else {
                     _this.displayError("Unexpected command " + chalk_1.default.magenta(command) + ". For more help, try " + chalk_1.default.green(coretool_1.CLI_CMD + chalk_1.default.yellow(' help')));
                 }
+            }
+        };
+        this.checkForFileWatch = function (config, cb) {
+            if (!_this.isWatchingForTypes) {
+                var rl_1 = readline.createInterface(process.stdin, process.stdout);
+                rl_1.question(chalk_1.default.yellow("Would you like to watch files for changes to keep track of types? ") + chalk_1.default.white("(y/n) "), function (answer) {
+                    if (answer.trim().toLowerCase() == "y") {
+                        console.log("");
+                        var watcher = new watcher_1.WatcherTool(_this, config, _this._argv);
+                        watcher.run(cb);
+                    }
+                    rl_1.close();
+                });
+            }
+            else {
+                cb(null, null);
             }
         };
         this.resolveConfigFile = function (success) {

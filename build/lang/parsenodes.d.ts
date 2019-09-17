@@ -1,4 +1,4 @@
-import { IPosition } from './lexer';
+import { IToken, IPosition } from './lexer';
 import { Runtime, IScope } from './runtime';
 import { IRuleCondition } from './varconfig';
 import { IValues, IEvaluatable } from './values';
@@ -8,7 +8,9 @@ export declare enum NodeType {
     Var = "var",
     Lookup = "lookup",
     Const = "const",
-    Statement = "statement"
+    Statement = "statement",
+    DocComment = "doccomment",
+    Type = "type"
 }
 export declare class ParseNode {
     type: NodeType;
@@ -44,6 +46,20 @@ export declare class LookupTableNode extends YieldNode {
         [key: string]: ExprNode;
     };
     constructor(items: ObjExpr);
+}
+export interface IDocCommentParam {
+    name: string;
+    type: TypeNode;
+    desc: string;
+}
+export declare class DocCommentNode extends ParseNode {
+    declType: "template" | "other";
+    desc: string;
+    params: IDocCommentParam[];
+    returnType: TypeNode;
+    type_: TypeNode;
+    constructor();
+    toTSDef: (decl: string) => string;
 }
 export declare enum StmtType {
     Noop = "noop",
@@ -93,7 +109,9 @@ export declare class VarDeclStmt extends StmtNode {
     name: string;
     value: ExprNode;
     isConst: boolean;
+    docComment: DocCommentNode;
     constructor();
+    generateOwnDocComment: () => void;
     evaluate: (runtime: Runtime, args: IValues) => any;
 }
 export declare class WhileStmt extends StmtNode {
@@ -170,11 +188,13 @@ export declare enum ExprType {
 export declare class ExprNode extends StmtNode {
     exprType: ExprType;
     constructor(exprType: ExprType);
+    tryCreateType: () => TypeNode;
     unpack: () => ExprNode;
 }
 export declare class LitExpr extends ExprNode {
     literal: any;
     constructor(literal: any);
+    tryCreateType: () => TypeNode;
     evaluate: (runtime: Runtime, args: IValues) => any;
 }
 export declare class LoadExpr extends ExprNode {
@@ -186,6 +206,7 @@ export declare class LoadExpr extends ExprNode {
 export declare class ParExpr extends ExprNode {
     expr: ExprNode;
     constructor(expr: ExprNode);
+    tryCreateType: () => TypeNode;
     generateConditionValue: (runtime: Runtime, args: IValues) => string;
     generateConditions: (runtime: Runtime, args: IValues, conditions: IRuleCondition[]) => void;
     evaluate: (runtime: Runtime, args: IValues) => any;
@@ -212,6 +233,7 @@ export declare class UnaryExpr extends ExprNode {
     expr: ExprNode;
     postFix: boolean;
     constructor(opType: UnOpType);
+    tryCreateType: () => TypeNode;
     generateConditions: (runtime: Runtime, args: IValues, conditions: IRuleCondition[]) => void;
     evaluate: (runtime: Runtime, args: IValues) => any;
 }
@@ -220,11 +242,13 @@ export declare class ObjExpr extends ExprNode {
         [key: string]: ExprNode;
     };
     constructor();
+    tryCreateType: () => TypeNode;
     evaluate: (runtime: Runtime, args: IValues) => any;
 }
 export declare class ArrayExpr extends ExprNode {
     values: ExprNode[];
     constructor();
+    tryCreateType: () => TypeNode;
     evaluate: (runtime: Runtime, args: IValues) => any;
 }
 export declare class AccessObjExpr extends ExprNode {
@@ -267,6 +291,7 @@ export declare class FuncExpr extends ExprNode {
     params: string[];
     body: StmtNode;
     constructor();
+    tryCreateType: () => TypeNode;
     evaluate: (runtime: Runtime, args: IValues) => any;
     mapArgsToScope: (params: string[], args: any[]) => IScope;
 }
@@ -276,6 +301,7 @@ export declare class IfExpr extends ExprNode {
     elseResult: StmtNode;
     enclosingBlock: BlockStmt;
     constructor();
+    tryCreateType: () => TypeNode;
     setAsExpression: (returnOnFirstValue?: boolean) => void;
     private generateVarConfig;
     evaluate: (runtime: Runtime, args: IValues) => any;
@@ -292,6 +318,7 @@ export declare enum HTMLExprType {
 export declare class HTMLExpr extends ExprNode {
     htmlType: HTMLExprType;
     constructor(htmlType: HTMLExprType);
+    tryCreateType: () => TypeNode;
     content: () => string;
     innerText: string;
     innerHTML: string;
@@ -354,4 +381,71 @@ export declare class TemplateNode extends ExprNode {
     expressions: ExprNode[];
     constructor();
     evaluate: (runtime: Runtime, args: IValues) => any;
+}
+export declare enum TypeNodeType {
+    Basic = "basic",
+    Parenthesised = "par",
+    Array = "array",
+    Object = "object",
+    Function = "function",
+    Union = "union",
+    Literal = "literal"
+}
+export declare class TypeNode extends ParseNode {
+    typeType: any;
+    constructor(typeType: any);
+    static _basicTypes: {
+        [name: string]: BasicTypeNode;
+    };
+    static getBasicType: (typeName: string) => BasicTypeNode;
+    matches: (otherType: TypeNode) => boolean;
+    protected matchesType: <T extends TypeNode>(otherType: TypeNode, detail: (otherType: T) => boolean) => boolean;
+    toTSDef: () => string;
+}
+export declare class BasicTypeNode extends TypeNode {
+    name: string;
+    constructor(name: string);
+    matches: (otherType: TypeNode) => any;
+    toTSDef: () => string;
+}
+export declare class ParTypeNode extends TypeNode {
+    elem: TypeNode;
+    constructor(elem: TypeNode);
+    matches: (otherType: TypeNode) => boolean;
+    toTSDef: () => string;
+}
+export declare class ArrayTypeNode extends TypeNode {
+    obj: TypeNode;
+    constructor(obj: TypeNode);
+    matches: (otherType: TypeNode) => any;
+    toTSDef: () => string;
+}
+export declare class ObjectTypeNode extends TypeNode {
+    props: {
+        [name: string]: TypeNode;
+    };
+    constructor();
+    matches: (otherType: TypeNode) => any;
+    toTSDef: () => string;
+}
+export interface IFuncParamType {
+    name: string;
+    type: TypeNode;
+}
+export declare class FunctionTypeNode extends TypeNode {
+    params: IFuncParamType[];
+    returnType: TypeNode;
+    constructor();
+    matches: (otherType: TypeNode) => any;
+    toTSDef: () => string;
+}
+export declare class UnionTypeNode extends TypeNode {
+    types: TypeNode[];
+    constructor();
+    toTSDef: () => string;
+}
+export declare class LiteralTypeNode extends TypeNode {
+    literal: IToken;
+    constructor(literal: IToken);
+    toTSDef: () => string;
 }

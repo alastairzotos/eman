@@ -9,6 +9,7 @@ var pdfGenerator_1 = require("./tools/pdfGenerator");
 var publisher_1 = require("./tools/publisher");
 var updater_1 = require("./tools/updater");
 var helptool_1 = require("./tools/helptool");
+var watcher_1 = require("./tools/watcher");
 // Clear the console
 process.stdout.write('\x1Bc');
 // Create cli application
@@ -21,6 +22,7 @@ cli.registerTool("test", unittester_1.UnitTester);
 cli.registerTool("pdf", pdfGenerator_1.PDFGenerator);
 cli.registerTool("publish", publisher_1.Publisher);
 cli.registerTool("update", updater_1.Updater, { requiresConfig: false });
+cli.registerTool("watch", watcher_1.WatcherTool);
 // Run
 cli.start();
 /*import { VersionChecker } from './tools/versionchecker';
