@@ -18,6 +18,8 @@ export class WatcherTool extends CoreTool<any> {
         super(program, config, argv);
     }
 
+    getDescription = () => 'Watches files for changes and creates type definition files to help with VSCode autocomplete';
+
     run = (cb: (err: any, result: any)=>void) => {
         this.program.isWatchingForTypes = true;
 
