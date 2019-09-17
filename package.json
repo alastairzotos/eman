@@ -1,6 +1,6 @@
 {
   "name": "eman-script",
-  "version": "0.3.56",
+  "version": "0.3.57",
   "description": "",
   "main": "build/main.js",
   "bin": {
