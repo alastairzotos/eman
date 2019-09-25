@@ -386,8 +386,9 @@ export class Runtime {
                         }
                     });
                 } else {
+                    const _this = this;
                     Object.keys(output.exports).forEach(memberName => {
-                        this.getScope()[memberName] = output.exports[memberName];
+                        _this.getScope()[memberName] = output.exports[memberName];
                     });
                 }
 

@@ -282,8 +282,9 @@ var Runtime = /** @class */ (function () {
                         });
                     }
                     else {
+                        var _this_2 = _this_1;
                         Object.keys(output_1.exports).forEach(function (memberName) {
-                            _this_1.getScope()[memberName] = output_1.exports[memberName];
+                            _this_2.getScope()[memberName] = output_1.exports[memberName];
                         });
                     }
                     // Import yielded variables
